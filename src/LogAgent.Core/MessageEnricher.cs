@@ -28,14 +28,17 @@ public sealed class MessageEnricher
     private readonly HttpClient _downloadHttp; // 大内容下载（raw 全文 / 文件流式落盘，10 分钟）
     private readonly string _filesDir;
     private readonly string _mcLogsBase;
+    private readonly bool _allowPrivateWebFetch;
 
-    public MessageEnricher(string logShareBase = "https://api.logshare.cn", HttpClient? http = null, string? filesDir = null, string? mcLogsBase = null)
+    public MessageEnricher(string logShareBase = "https://api.logshare.cn", HttpClient? http = null, string? filesDir = null,
+        string? mcLogsBase = null, bool allowPrivateWebFetch = false)
     {
         _logShareBase = logShareBase.TrimEnd('/');
         _mcLogsBase = (mcLogsBase ?? "https://api.mclo.gs").TrimEnd('/');
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         _downloadHttp = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         _filesDir = filesDir ?? Path.Combine(AppConfigStore.GetConfigDirectory(), "files");
+        _allowPrivateWebFetch = allowPrivateWebFetch;
     }
 
     public event EventHandler<string>? EnrichLog;
@@ -62,6 +65,14 @@ public sealed class MessageEnricher
             if (!seen.Add($"{key}:{m.Groups["id"].Value}")) continue;
             blocks.Add(await FetchSharedLogAsync(key, m.Groups["id"].Value, ct));
         }
+        // 一般网页链接（排除已处理的共享日志平台）：自动抓取正文阅读，每条消息最多 2 条
+        foreach (var url in GeneralWebUrl.Matches(message.Text)
+                     .Select(m => m.Value.TrimEnd('.', '，', '。', '）', ')', '"', '\''))
+                     .Where(u => !u.Contains("logshare.cn", StringComparison.OrdinalIgnoreCase)
+                              && !u.Contains("mclo.gs", StringComparison.OrdinalIgnoreCase))
+                     .Where(u => seen.Add(u))
+                     .Take(2))
+            blocks.Add(await FetchWebPageAsync(url, ct));
         if (message.Attachments is { Count: > 0 })
         {
             foreach (var attachment in message.Attachments)
@@ -70,6 +81,29 @@ public sealed class MessageEnricher
         if (blocks.Count == 0) return message.Text;
         var appended = string.Join("\n\n", blocks.Where(b => b.Length > 0));
         return message.Text.Length == 0 ? appended : message.Text + "\n\n" + appended;
+    }
+
+    private static readonly Regex GeneralWebUrl = new(
+        @"https?://[^\s<>()\[\]""'，]+", RegexOptions.Compiled);
+
+    /// <summary>抓取一般网页：提取标题与正文，注入阅读块（SSRF 守卫默认开启）。</summary>
+    private async Task<string> FetchWebPageAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            var page = await Knowledge.WebFetchCore.FetchAsync(url, allowPrivate: _allowPrivateWebFetch, maxTextChars: 8000, ct);
+            Log($"[网页] 抓取 {url} 成功（{page.Text.Length} 字符）");
+            var sb = new StringBuilder();
+            sb.AppendLine($"【已抓取网页：{page.Title}】({url})");
+            if (page.Truncated) sb.AppendLine("（正文较长，仅前 8000 字符——需要更多内容可让模型用 web_fetch 工具抓取）");
+            sb.Append(page.Text);
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            Log($"[网页] 抓取 {url} 失败：{ex.Message}");
+            return $"【网页抓取失败：{url}——{ex.Message}】（可用 web_fetch 工具重试，或请用户直接粘贴正文）";
+        }
     }
 
     /// <summary>兼容入口：抓取 LogShare 日志。</summary>

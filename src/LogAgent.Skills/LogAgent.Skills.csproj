@@ -4,6 +4,7 @@
     <ProjectReference Include="..\LogAgent.Shared\LogAgent.Shared.csproj" />
     <ProjectReference Include="..\LogAgent.Mcp\LogAgent.Mcp.csproj" />
     <ProjectReference Include="..\LogAgent.Sandbox\LogAgent.Sandbox.csproj" />
+    <ProjectReference Include="..\LogAgent.Knowledge\LogAgent.Knowledge.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -11,7 +11,7 @@ namespace LogAgent.Skills;
 /// ③ MCP 服务器工具（标准协议，名为 mcp__{server}__{tool}）；
 /// ④ 内置文件工具（read_file / search_file / run_shell——大日志完整落盘后的选择性读取与检索）。
 /// </summary>
-public sealed class ToolHostHub(SkillRegistry registry, McpManager? mcp, AppConfig appConfig, FileTools? fileTools = null) : ISkillToolHost
+public sealed class ToolHostHub(SkillRegistry registry, McpManager? mcp, AppConfig appConfig, FileTools? fileTools = null, WebTools? webTools = null) : ISkillToolHost
 {
     /// <summary>读取技能说明的内置工具名。</summary>
     public const string ReadSkillTool = "read_skill";
@@ -39,6 +39,9 @@ public sealed class ToolHostHub(SkillRegistry registry, McpManager? mcp, AppConf
         if (fileTools is not null)
             tools.AddRange(fileTools.BuildToolDefinitions(shellEnabled: appConfig.Sandbox.Enabled));
 
+        if (webTools is not null)
+            tools.AddRange(webTools.BuildToolDefinitions());
+
         return tools;
     }
 
@@ -58,6 +61,9 @@ public sealed class ToolHostHub(SkillRegistry registry, McpManager? mcp, AppConf
 
         if (fileTools is not null && FileTools.IsBuiltinTool(toolName))
             return await fileTools.ExecuteAsync(toolName, argumentsJson, ct);
+
+        if (webTools is not null && WebTools.IsBuiltinTool(toolName))
+            return await webTools.ExecuteAsync(toolName, argumentsJson, ct);
 
         return await registry.ExecuteToolAsync(toolName, argumentsJson, config, ct);
     }

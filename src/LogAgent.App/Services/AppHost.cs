@@ -273,7 +273,7 @@ public static class AppHost
         var fileTools = new LogAgent.Skills.FileTools(filesDir, Config.Sandbox.Enabled ? _sandbox.Runner : null);
         fileTools.ToolLog += (_, line) => OnLog($"[工具] {line}");
 
-        var hub = new Skills.ToolHostHub(_skills, _mcp, Config, fileTools);
+        var hub = new Skills.ToolHostHub(_skills, _mcp, Config, fileTools, new Skills.WebTools());
 
         var groupAgent = new GroupContextAgent(Router, _knowledge, Config.Knowledge, hub, Config.Skills);
         groupAgent.AgentLog += (_, line) => OnLog($"[技能] {line}");
