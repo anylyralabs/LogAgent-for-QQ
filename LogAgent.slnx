@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LogAgent.App/LogAgent.App.csproj" />
+    <Project Path="src/LogAgent.Connections/LogAgent.Connections.csproj" />
+    <Project Path="src/LogAgent.Core/LogAgent.Core.csproj" />
+    <Project Path="src/LogAgent.Headless/LogAgent.Headless.csproj" />
+    <Project Path="src/LogAgent.Knowledge/LogAgent.Knowledge.csproj" />
+    <Project Path="src/LogAgent.Mcp/LogAgent.Mcp.csproj" />
+    <Project Path="src/LogAgent.Memory/LogAgent.Memory.csproj" />
+    <Project Path="src/LogAgent.NapCat/LogAgent.NapCat.csproj" />
+    <Project Path="src/LogAgent.Routing/LogAgent.Routing.csproj" />
+    <Project Path="src/LogAgent.Sandbox/LogAgent.Sandbox.csproj" />
+    <Project Path="src/LogAgent.Shared/LogAgent.Shared.csproj" />
+    <Project Path="src/LogAgent.Skills/LogAgent.Skills.csproj" />
+    <Project Path="src/LogAgent.Training/LogAgent.Training.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LogAgent.Tests/LogAgent.Tests.csproj" />
+  </Folder>
+</Solution>

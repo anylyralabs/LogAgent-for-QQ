@@ -1,0 +1,215 @@
+<Page x:Class="LogAgent.App.Pages.NapCatPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="OneBot 连接">
+    <Grid Margin="32">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="24"/>
+            <ColumnDefinition Width="340"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 左主栏：三步接入流程 -->
+        <ScrollViewer Grid.Column="0">
+            <StackPanel>
+                <TextBlock Text="OneBot 连接" Style="{StaticResource TitleText}" Margin="0,0,0,4"/>
+                <TextBlock Style="{StaticResource SubtitleText}" Margin="0,0,0,20"
+                           Text="通过 NapCat 协议端接入：登录一个 QQ 号，能力接近真人账号"/>
+
+                <!-- ① 配置与启动 NapCat -->
+                <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="① 配置与启动 NapCat" Style="{StaticResource SectionTitle}" Margin="0,0,0,6"/>
+                        <TextBlock FontSize="12.5" Foreground="{StaticResource TextTertiary}" TextWrapping="Wrap"
+                                   Margin="0,0,0,14"
+                                   Text="从 NapCat 官方仓库下载 Shell 版压缩包解压，直接选择其中的启动脚本（如 napcat.bat）；首次启动后 WebUI Token 会自动读取。"/>
+
+                        <TextBlock Text="NapCat 启动脚本" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding NapCatScript, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Grid.Column="2" x:Name="BrowseScriptButton" Content="选择脚本…" Command="{Binding BrowseScriptCommand}"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="WebUI Token（留空自动读取 webui.json）" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding WebUiToken, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="WebUI 端口" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding WebUiPort, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="保存配置" Command="{Binding SaveConfigCommand}" Margin="0,0,8,0"/>
+                            <Button Content="启动 NapCat" Command="{Binding StartNapCatCommand}" Style="{StaticResource AccentButton}" Margin="0,0,8,0"/>
+                            <Button Content="停止 NapCat" Command="{Binding StopNapCatCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ② 扫码登录 QQ -->
+                <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="② 扫码登录 QQ" Style="{StaticResource SectionTitle}" Margin="0,0,0,6"/>
+                        <TextBlock FontSize="12.5" Foreground="{StaticResource TextTertiary}" Margin="0,0,0,12"
+                                   Text="启动 NapCat 后自动获取二维码；已登录过的设备可用快速登录免扫码。"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="24"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <Border Background="White" CornerRadius="6" Padding="6"
+                                        BorderBrush="{StaticResource ControlStroke}" BorderThickness="1">
+                                    <Image x:Name="QrImage" Source="{Binding QrImage}" Width="176" Height="176"
+                                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                </Border>
+                                <Button Content="获取 / 刷新二维码" Command="{Binding RefreshQrCommand}" Margin="0,10,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" VerticalAlignment="Top" Margin="0,4,0,0">
+                                <TextBlock Text="快速登录（推荐）" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                                <TextBlock FontSize="12.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+                                           LineHeight="20" Margin="0,0,0,10"
+                                           Text="在同一台设备登录过的小号可免扫码：填写 QQ 号即可尝试恢复会话。"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding QuickLoginUin, UpdateSourceTrigger=PropertyChanged}"
+                                             MinWidth="120"/>
+                                    <Button Grid.Column="2" Content="快速登录" Command="{Binding QuickLoginCommand}"
+                                            Style="{StaticResource AccentButton}"/>
+                                </Grid>
+                                <TextBlock FontSize="12" Foreground="{StaticResource TextTertiary}" Margin="0,12,0,0"
+                                           TextWrapping="Wrap"
+                                           Text="建议使用有正常使用记录的 QQ 小号，遵守平台规则。"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ③ OneBot 服务 -->
+                <Border Style="{StaticResource Card}" Padding="20">
+                    <StackPanel>
+                        <TextBlock Text="③ OneBot 服务（反向 WebSocket）" Style="{StaticResource SectionTitle}" Margin="0,0,0,6"/>
+                        <TextBlock FontSize="12.5" Foreground="{StaticResource TextTertiary}" TextWrapping="Wrap"
+                                   Margin="0,0,0,14"
+                                   Text="启动 NapCat 时会自动把反向 WS 配置补入 NapCat（无需手动去后台添加）；如需手动补入或修改端口/Token 后重新同步，点右侧按钮。"/>
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="监听端口" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding OneBotPort, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="连接 Token（可留空）" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding OneBotToken, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="{StaticResource LayerFill}" CornerRadius="4"
+                                    BorderBrush="{StaticResource ControlStroke}" BorderThickness="1" Padding="10,6">
+                                <TextBlock Text="{Binding WsAddress}" FontFamily="{StaticResource MonoFont}"
+                                           FontSize="12.5" Foreground="{StaticResource AccentText}"/>
+                            </Border>
+                            <Button Grid.Column="2" Content="复制地址" Click="CopyAddress_Click"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="启动服务" Command="{Binding StartServiceCommand}" Style="{StaticResource AccentButton}" Margin="0,0,8,0"/>
+                            <Button Content="停止服务" Command="{Binding StopServiceCommand}" Margin="0,0,8,0"/>
+                            <Button Content="补入连接配置到 NapCat" Command="{Binding InjectConfigCommand}" Margin="0,0,12,0"/>
+                            <TextBlock VerticalAlignment="Center" FontSize="13">
+                                <Run Text="状态：" Foreground="{StaticResource TextSecondary}"/>
+                                <Run Text="{Binding ServiceStatusText, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 右栏：状态汇总 + 提示 -->
+        <StackPanel Grid.Column="2">
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,58,0,16">
+                <StackPanel>
+                    <TextBlock Text="状态" Style="{StaticResource SectionTitle}" Margin="0,0,0,12"/>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="NapCat 进程" FontSize="13" Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding NapCatStatus, Mode=OneWay}" FontSize="13"
+                                   FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="QQ 登录" FontSize="13" Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding StatusText, Mode=OneWay}" FontSize="13"
+                                   FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Right"
+                                   MaxWidth="180" TextTrimming="CharacterEllipsis"/>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="OneBot 服务" FontSize="13" Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding ServiceStatusText, Mode=OneWay}" FontSize="13"
+                                   FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Right"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="接入流程" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                    <TextBlock FontSize="12.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" LineHeight="22">
+                        1. 选择 NapCat 启动脚本 → 启动 NapCat<LineBreak/>
+                        2. 扫码（或快速登录）完成 QQ 登录<LineBreak/>
+                        3. NapCat 网络配置添加反向 WS<LineBreak/>
+                        4. 本页启动服务 → 群里 @ 机器人测试
+                    </TextBlock>
+                    <TextBlock FontSize="12" Foreground="{StaticResource TextTertiary}" Margin="0,12,0,0" TextWrapping="Wrap">
+                        运行明细请查看左侧「运行日志」页；本页服务与「官方 Bot」相互独立，可同时配置。
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+</Page>

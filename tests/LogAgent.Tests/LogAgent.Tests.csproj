@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LogAgent.Shared\LogAgent.Shared.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Routing\LogAgent.Routing.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Sandbox\LogAgent.Sandbox.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Connections\LogAgent.Connections.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.NapCat\LogAgent.NapCat.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Memory\LogAgent.Memory.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Core\LogAgent.Core.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Knowledge\LogAgent.Knowledge.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Mcp\LogAgent.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Skills\LogAgent.Skills.csproj" />
+    <ProjectReference Include="..\..\src\LogAgent.Training\LogAgent.Training.csproj" />
+  </ItemGroup>
+
+</Project>

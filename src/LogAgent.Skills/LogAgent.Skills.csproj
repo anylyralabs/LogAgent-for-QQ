@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\LogAgent.Shared\LogAgent.Shared.csproj" />
+    <ProjectReference Include="..\LogAgent.Mcp\LogAgent.Mcp.csproj" />
+    <ProjectReference Include="..\LogAgent.Sandbox\LogAgent.Sandbox.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

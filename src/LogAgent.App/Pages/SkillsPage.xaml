@@ -1,0 +1,237 @@
+<Page x:Class="LogAgent.App.Pages.SkillsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="技能商店">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <Grid Margin="32">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="24"/>
+            <ColumnDefinition Width="380"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 左主栏：已安装技能 + 配置 + MCP 服务器 -->
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="技能与 MCP" Style="{StaticResource TitleText}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource SubtitleText}" TextWrapping="Wrap" MaxWidth="440"
+                               Text="技能（skill.json / SKILL.md）与标准 MCP 服务器为小炎扩展工具与领域知识，对话中按需调用"/>
+                </StackPanel>
+                <Button Content="刷新" Command="{Binding RefreshCommand}" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+            </Grid>
+
+            <!-- 已安装技能 -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Padding="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="已安装技能" Style="{StaticResource SectionTitle}" Margin="0,0,0,10"/>
+
+                    <DataGrid Grid.Row="1" x:Name="SkillsGrid" ItemsSource="{Binding Installed}"
+                              SelectedItem="{Binding Selected}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                              IsReadOnly="True" SelectionMode="Single" MinHeight="120" MaxHeight="200">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="130"/>
+                            <DataGridTextColumn Header="版本" Binding="{Binding Version}" Width="62"/>
+                            <DataGridTextColumn Header="类型" Binding="{Binding TypeDisplay}" Width="72"/>
+                            <DataGridTextColumn Header="来源" Binding="{Binding SourceDisplay}" Width="52"/>
+                            <DataGridTextColumn Header="工具" Binding="{Binding ToolDisplay}" Width="64"/>
+                            <DataGridTemplateColumn Header="启用" Width="48">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Grid Grid.Row="2" Margin="0,12,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="UninstallButton" Content="卸载选中" Command="{Binding UninstallCommand}" Margin="0,0,8,0"/>
+                            <Button x:Name="OpenSkillsDirButton" Content="打开技能目录" Command="{Binding OpenDirCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Status}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   FontSize="12" Foreground="{StaticResource TextTertiary}"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- 选中技能的配置 -->
+            <Border Grid.Row="3" Style="{StaticResource Card}" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="技能设置" Style="{StaticResource SectionTitle}" Margin="0,0,0,10"/>
+                    <ItemsControl ItemsSource="{Binding SettingRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="12"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12.5"
+                                               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="2" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="NoSettingsHint" Text="选中带设置项的技能后可在此配置" FontSize="12"
+                               Foreground="{StaticResource TextTertiary}" Margin="0,2,0,8">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SettingRows.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Button x:Name="SaveSkillSettingsButton" Content="保存设置" Command="{Binding SaveSettingsCommand}"
+                            Style="{StaticResource AccentButton}" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
+
+            <!-- MCP 服务器（标准 Model Context Protocol） -->
+            <Border Grid.Row="5" Style="{StaticResource Card}" Padding="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="MCP 服务器" Style="{StaticResource SectionTitle}"/>
+                        <TextBlock Text="标准 Model Context Protocol（stdio / Streamable HTTP），工具自动暴露给小炎"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   FontSize="11.5" Foreground="{StaticResource TextTertiary}"/>
+                    </Grid>
+
+                    <DataGrid Grid.Row="1" x:Name="McpGrid" ItemsSource="{Binding McpServers}"
+                              SelectedItem="{Binding SelectedMcp}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                              IsReadOnly="True" SelectionMode="Single" MinHeight="100" MaxHeight="180">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="120"/>
+                            <DataGridTextColumn Header="方式" Binding="{Binding TransportDisplay}" Width="56"/>
+                            <DataGridTextColumn Header="状态" Binding="{Binding StateDisplay}" Width="60"/>
+                            <DataGridTextColumn Header="工具" Binding="{Binding ToolDisplay}" Width="70"/>
+                            <DataGridTextColumn Header="详情" Binding="{Binding Detail}" Width="*"/>
+                            <DataGridTemplateColumn Header="启用" Width="48">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="AddMcpButton" Content="添加…" Click="AddMcp_Click" Margin="0,0,8,0"/>
+                            <Button x:Name="EditMcpButton" Content="编辑…" Click="EditMcp_Click" Margin="0,0,8,0"/>
+                            <Button x:Name="ReconnectMcpButton" Content="重连" Click="ReconnectMcp_Click" Margin="0,0,8,0"/>
+                            <Button x:Name="RemoveMcpButton" Content="删除" Click="RemoveMcp_Click"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding McpStatus}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Foreground="{StaticResource TextTertiary}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 右栏：商店 + MCP 目录 + 说明 -->
+        <StackPanel Grid.Column="2">
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,58,0,16">
+                <StackPanel>
+                    <TextBlock Text="常用 MCP 服务器" Style="{StaticResource SectionTitle}" Margin="0,0,0,6"/>
+                    <TextBlock Text="一键添加常用服务器模板（添加后可编辑参数；npx 系需本机有 Node）"
+                               FontSize="11.5" Foreground="{StaticResource TextTertiary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <ListBox ItemsSource="{Binding McpCatalogItems}" SelectedItem="{Binding SelectedMcpCatalogItem}"
+                             MinHeight="90" MaxHeight="190" Margin="0,0,0,8">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="2,4">
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="{Binding Name}"/>
+                                    <TextBlock FontSize="11" Foreground="{StaticResource TextTertiary}"
+                                               Text="{Binding CommandHint}" TextWrapping="Wrap"/>
+                                    <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondary}"
+                                               Text="{Binding Description}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button x:Name="AddMcpFromCatalogButton" Content="添加为 MCP 服务器…"
+                            Click="AddMcpFromCatalog_Click" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="商店（技能包）" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                    <TextBlock Text="商店地址（catalog.json）" FontSize="11.5" Foreground="{StaticResource TextTertiary}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding CatalogUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Button x:Name="RefreshStoreButton" Content="刷新商店" Command="{Binding RefreshStoreCommand}" Margin="0,0,8,0"/>
+                        <Button x:Name="InstallStoreItemButton" Content="安装选中" Command="{Binding InstallStoreItemCommand}"/>
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding StoreItems}" SelectedItem="{Binding SelectedStoreItem}"
+                             MinHeight="90" MaxHeight="200" Margin="0,0,0,10">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="2,4">
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="{Binding Name}"/>
+                                    <TextBlock FontSize="11.5" Foreground="{StaticResource TextTertiary}" Text="{Binding Subtitle}"/>
+                                    <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondary}"
+                                               Text="{Binding Description}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button x:Name="InstallSkillFileButton" Content="从文件安装…" Click="InstallFile_Click" Margin="0,0,8,0"/>
+                        <Button x:Name="InstallSkillFolderButton" Content="从文件夹安装…" Click="InstallFolder_Click"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding StoreStatus}" FontSize="12" Foreground="{StaticResource TextTertiary}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="说明" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                    <TextBlock FontSize="12.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" LineHeight="21">
+                        · <Run FontWeight="SemiBold">技能</Run>：skill.json（HTTP 工具）/ SKILL.md（指令知识包，模型按需读取）<LineBreak/>
+                        · <Run FontWeight="SemiBold">MCP</Run>：标准协议（JSON-RPC over stdio / HTTP），兼容官方与社区服务器<LineBreak/>
+                        · 用户技能在 <Run FontWeight="SemiBold">%AppData%\LogAgent\skills\</Run>；MCP 配置存 config.json<LineBreak/>
+                        · 启用后工具对模型可见，由模型在对话中按需调用<LineBreak/>
+                        · npx 首次启动会下载包，可能稍慢；测试请用「测试连接」按钮
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+    </ScrollViewer>
+</Page>

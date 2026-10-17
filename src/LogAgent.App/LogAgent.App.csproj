@@ -1,0 +1,54 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\LogAgent.Shared\LogAgent.Shared.csproj" />
+    <ProjectReference Include="..\LogAgent.Core\LogAgent.Core.csproj" />
+    <ProjectReference Include="..\LogAgent.Routing\LogAgent.Routing.csproj" />
+    <ProjectReference Include="..\LogAgent.Memory\LogAgent.Memory.csproj" />
+    <ProjectReference Include="..\LogAgent.Connections\LogAgent.Connections.csproj" />
+    <ProjectReference Include="..\LogAgent.NapCat\LogAgent.NapCat.csproj" />
+    <ProjectReference Include="..\LogAgent.Sandbox\LogAgent.Sandbox.csproj" />
+    <ProjectReference Include="..\LogAgent.Training\LogAgent.Training.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.8.1" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
+    <AssemblyTitle>LogAgent</AssemblyTitle>
+    <Product>LogAgent — QQ 日志分析助手</Product>
+    <Version>0.7.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LogAgent.Skills\LogAgent.Skills.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\logo.png" />
+    <Resource Include="Assets\logo-128.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 内置技能（随安装包自带）：复制到输出/发布目录的 skills\ 下 -->
+    <Content Include="skills\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WinForms 仅为系统托盘图标（NotifyIcon）引入；移除其全局 using，避免与 WPF 类型冲突（Application/Brush/Color…） -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+</Project>

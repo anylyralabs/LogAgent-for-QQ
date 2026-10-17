@@ -1,0 +1,44 @@
+{
+  "id": "logshare",
+  "name": "LogShare 日志解析（只读）",
+  "version": "1.1.0",
+  "author": "LogAgent",
+  "description": "解析并下载用户已经分享到 LogShare（logshare.cn）的日志，供小炎在本地分析。只读通道：不上传内容、不调用云端 AI 分析。",
+  "type": "http",
+  "baseUrl": "https://api.logshare.cn",
+  "settings": [
+    {
+      "key": "timeoutSeconds",
+      "label": "请求读取超时（秒）",
+      "default": "60"
+    }
+  ],
+  "tools": [
+    {
+      "name": "logshare_insights",
+      "description": "获取某条已分享日志的结构化解析结果（服务端自动识别的日志类型、问题列表与信息）。参数为日志 id（如群里链接 logshare.cn/xxxxx 中的 xxxxx）。",
+      "method": "GET",
+      "path": "/v1/insights/{id}",
+      "params": [
+        {
+          "name": "id",
+          "description": "日志 id（logshare.cn 链接尾部的那串字符）",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "logshare_raw",
+      "description": "获取某条已分享日志的原始文本（用于阅读日志内容并自行分析）。参数为日志 id。",
+      "method": "GET",
+      "path": "/v1/raw/{id}",
+      "params": [
+        {
+          "name": "id",
+          "description": "日志 id（logshare.cn 链接尾部的那串字符）",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+﻿<Window x:Class="LogAgent.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LogAgent — 日志分析助手" Height="720" Width="1180"
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/logo.png"
+        Background="{StaticResource WindowBackground}">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 侧边栏（浅色分区 + 右侧分隔线） -->
+        <Border Grid.Column="0" Background="{StaticResource LayerFill}"
+                BorderBrush="{StaticResource DividerStroke}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="20,24,20,16">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="Assets/logo.png" Width="30" Height="30" Margin="0,0,10,0"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="LogAgent" FontSize="20" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="QQ 日志分析助手" FontSize="12"
+                               Foreground="{StaticResource TextTertiary}" Margin="40,2,0,0"/>
+                </StackPanel>
+                <ListBox x:Name="NavList" Background="Transparent" BorderThickness="0"
+                         ItemContainerStyle="{StaticResource NavItem}"
+                         SelectionChanged="NavList_SelectionChanged" Margin="0,4,0,0">
+                    <ListBoxItem Tag="dashboard">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE80F;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="仪表盘"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="chat">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8F2;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="对话"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="providers">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE774;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="模型路由"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="officialbot">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8BD;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="官方 Bot"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="napcat">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE704;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="OneBot 连接"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="knowledge">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8F1;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="知识库"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="skills">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE71D;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="技能商店"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="memory">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE81C;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="记忆浏览器"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="sessions">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="会话管理"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="sandbox">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xEA18;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="沙箱"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="logs">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE9D9;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="运行日志"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Tag="settings">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="16" Margin="0,0,12,0"/>
+                            <TextBlock Text="设置"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- 内容区 -->
+        <Frame Grid.Column="1" x:Name="ContentHost" NavigationUIVisibility="Hidden"
+               Background="{StaticResource WindowBackground}" Focusable="False"/>
+    </Grid>
+</Window>

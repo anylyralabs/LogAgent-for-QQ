@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\LogAgent.Shared\LogAgent.Shared.csproj" />
+    <ProjectReference Include="..\LogAgent.Routing\LogAgent.Routing.csproj" />
+    <ProjectReference Include="..\LogAgent.Memory\LogAgent.Memory.csproj" />
+    <ProjectReference Include="..\LogAgent.Knowledge\LogAgent.Knowledge.csproj" />
+    <ProjectReference Include="..\LogAgent.Skills\LogAgent.Skills.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

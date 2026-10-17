@@ -1,0 +1,139 @@
+<Page x:Class="LogAgent.App.Pages.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="设置">
+    <ScrollViewer Padding="32">
+        <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock Text="设置" Style="{StaticResource TitleText}" Margin="0,0,0,4"/>
+            <TextBlock Text="触发规则 · 会话 · 知识库 · 沙箱 · 数据维护" Style="{StaticResource SubtitleText}" Margin="0,0,0,20"/>
+
+            <!-- 触发规则 -->
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="触发与回复" Style="{StaticResource SectionTitle}" Margin="0,0,0,12"/>
+                    <CheckBox Content="群聊需要 @ 机器人才响应（私聊总是响应）" IsChecked="{Binding NeedAtInGroup}" Margin="0,0,0,10"/>
+                    <TextBlock Text="额外触发关键词（逗号分隔，消息包含即响应，无需 @）" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding TriggerKeywords, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 会话切断 -->
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="会话切断" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <TextBlock Text="会话到达任一条件即自动切段并归档（切段后生成摘要，供后续对话参考）"
+                               FontSize="12" Foreground="{StaticResource TextTertiary}" Margin="0,0,0,12"/>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="静默超时（分钟）" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding IdleTimeoutMinutes, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="消息数上限" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding MaxMessages, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Text="Token 估算上限" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding MaxTokens, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                    </Grid>
+                    <CheckBox Content="切段时生成 L1 摘要（走 Summary 分流，可用便宜模型）" IsChecked="{Binding SummaryOnCut}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 知识库 -->
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="知识库" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <TextBlock FontSize="12" Foreground="{StaticResource TextTertiary}" Margin="0,0,0,12"
+                               Text="知识来源与审核在「知识库」页管理；此处控制检索行为"/>
+                    <CheckBox Content="启用知识库检索（回答时自动注入相关知识并带引用）" IsChecked="{Binding KnowledgeEnabled}" Margin="0,0,0,10"/>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="每轮检索注入条数" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding RagTopK, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                    </Grid>
+                    <CheckBox Content="学习命令入库自动转正（关闭则先进候选区人工审核）" IsChecked="{Binding KnowledgeAutoApprove}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 沙箱 -->
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="沙箱" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <TextBlock FontSize="12" Foreground="{StaticResource TextTertiary}" Margin="0,0,0,12"
+                               Text="命令白名单/黑名单正则在「沙箱」页管理；此处控制执行限额"/>
+                    <CheckBox Content="启用沙箱执行（Agent 允许在工作区内运行白名单命令）" IsChecked="{Binding SandboxEnabled}" Margin="0,0,0,10"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="命令超时（秒）" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding SandboxTimeout, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="输出截断（KB）" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding SandboxOutputKb, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Text="下载上限（MB）" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding SandboxDownloadMb, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 启动与自动化 -->
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="启动与自动化" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
+                    <TextBlock Text="让机器人随电脑自动上线，无需每次手动操作" FontSize="12"
+                               Foreground="{StaticResource TextTertiary}" Margin="0,0,0,12"/>
+                    <CheckBox Content="开机自启动（登录 Windows 后自动后台启动，立即生效）"
+                              IsChecked="{Binding AutoLaunchWindows}" Margin="0,0,0,10"/>
+                    <CheckBox Content="启动后自动连接 Bot（OneBot 服务与官方 Bot 按各自「启用」开关连接）"
+                              IsChecked="{Binding AutoStartBots}" Margin="0,0,0,10"/>
+                    <CheckBox Content="启动时最小化到系统托盘（后台驻留，双击托盘图标打开）" IsChecked="{Binding StartMinimized}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 数据与维护 -->
+            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="数据与维护" Style="{StaticResource SectionTitle}" Margin="0,0,0,10"/>
+                    <TextBlock Text="{Binding DataDirInfo}" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                               TextWrapping="Wrap" Margin="0,0,0,10"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="打开数据目录" Command="{Binding OpenDataDirCommand}" Margin="0,0,8,0"/>
+                    </StackPanel>
+                    <TextBlock FontSize="12" Foreground="{StaticResource TextTertiary}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Text="训练数据导出在「会话管理」页；卸载应用不会删除数据目录。"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                <Button Content="保存设置" Command="{Binding SaveCommand}" Style="{StaticResource AccentButton}" Margin="0,0,12,0"/>
+                <TextBlock Text="{Binding SaveHint}" VerticalAlignment="Center" FontSize="12.5"
+                           Foreground="{StaticResource OkFill}" TextWrapping="Wrap"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

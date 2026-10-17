@@ -1,0 +1,34 @@
+<Page x:Class="LogAgent.App.Pages.MemoryPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="记忆浏览器">
+    <Grid Margin="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="记忆浏览器" Style="{StaticResource TitleText}" Margin="0,0,0,4"/>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="最近的问答对（Turn）——工作记忆的沉淀，也是训练数据导出的原料"
+                       Foreground="{StaticResource TextSecondary}" FontSize="13" VerticalAlignment="Center"/>
+            <Button Content="刷新" Command="{Binding RefreshCommand}" Padding="12,5" Margin="16,0,0,0"/>
+        </StackPanel>
+
+        <DataGrid Grid.Row="2" ItemsSource="{Binding Turns}"
+                  AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                  Background="Transparent" RowBackground="Transparent"
+                  GridLinesVisibility="Horizontal" BorderBrush="{StaticResource ControlStroke}" BorderThickness="1"
+                  RowHeight="36" ColumnHeaderHeight="30" IsReadOnly="True">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="会话" Binding="{Binding ChatId}" Width="100"/>
+                <DataGridTextColumn Header="时间" Binding="{Binding Time}" Width="110"/>
+                <DataGridTextColumn Header="问" Binding="{Binding Question}" Width="*"/>
+                <DataGridTextColumn Header="答" Binding="{Binding Answer}" Width="*"/>
+                <DataGridTextColumn Header="质量" Binding="{Binding Quality}" Width="70"/>
+                <DataGridTextColumn Header="模型" Binding="{Binding Model}" Width="90"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Page>

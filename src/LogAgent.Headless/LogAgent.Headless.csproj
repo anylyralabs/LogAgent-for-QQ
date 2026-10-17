@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-LogAgent.Headless-b5a7b765-6a78-4f7f-ad6a-e0cb834440ce</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LogAgent.Shared\LogAgent.Shared.csproj" />
+    <ProjectReference Include="..\LogAgent.Core\LogAgent.Core.csproj" />
+    <ProjectReference Include="..\LogAgent.Routing\LogAgent.Routing.csproj" />
+    <ProjectReference Include="..\LogAgent.Memory\LogAgent.Memory.csproj" />
+    <ProjectReference Include="..\LogAgent.Knowledge\LogAgent.Knowledge.csproj" />
+    <ProjectReference Include="..\LogAgent.Training\LogAgent.Training.csproj" />
+  </ItemGroup>
+</Project>
