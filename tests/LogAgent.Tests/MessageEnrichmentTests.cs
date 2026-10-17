@@ -21,7 +21,7 @@ public class MessageEnricherTests : IDisposable
     }
 
     private MessageEnricher Make(MiniHttpServer server)
-        => new($"http://127.0.0.1:{server.Port}", null, _filesDir);
+        => new($"http://127.0.0.1:{server.Port}", null, _filesDir, $"http://127.0.0.1:{server.Port}");
 
     private static BotMessage Msg(string text, IReadOnlyList<MessageAttachment>? attachments = null) => new()
     {
@@ -78,6 +78,37 @@ public class MessageEnricherTests : IDisposable
 
         var text = await enricher.EnrichTextAsync(Msg("看这个 https://logshare.cn/ZZZ999"));
         Assert.Contains("抓取失败", text);
+    }
+
+    [Fact]
+    public async Task Enrich_McLogsLink_FetchesRawAndInsights()
+    {
+        using var server = new MiniHttpServer((_, path, _) => path.Contains("/1/insights/")
+            ? ("200 OK", "application/json", """{"analysis":"Paper 1.21.1","problems":["Mod compat"],"solutions":["Remove mod X"]}""")
+            : ("200 OK", "text/plain", "[12:00:00] [main/FATAL]: Failed to initialize game\n    at net.paper.Main.run"));
+        var enricher = Make(server);
+
+        // 短链与 api 直链两种形态都应命中
+        var text = await enricher.EnrichTextAsync(Msg("mclo.gs 链接：https://mclo.gs/XyZ123abcD48"));
+        Assert.Contains("【已从 mclo.gs 链接抓取", text);
+        Assert.Contains("Failed to initialize game", text);
+        Assert.Contains("结构化解析", text);
+        Assert.Contains("https://mclo.gs/XyZ123abcD48", text); // 原消息保留
+
+        var text2 = await enricher.EnrichTextAsync(Msg("再看这个 https://api.mclo.gs/1/raw/XyZ123abcD48"));
+        Assert.Contains("【已从 mclo.gs 链接抓取", text2);
+        Assert.DoesNotContain("抓取失败", text2);
+    }
+
+    [Fact]
+    public async Task Enrich_McLogsLink_Failure_ReportsGracefully()
+    {
+        using var server = new MiniHttpServer((_, _, _) => ("404 Not Found", "text/plain", "nope"));
+        var enricher = Make(server);
+
+        var text = await enricher.EnrichTextAsync(Msg("https://mclo.gs/QQQ999aaa111"));
+        Assert.Contains("抓取失败", text);
+        Assert.Contains("mclo.gs", text);
     }
 
     [Fact]

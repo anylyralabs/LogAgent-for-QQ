@@ -1,0 +1,44 @@
+{
+  "id": "mclogs",
+  "name": "mclo.gs 日志解析（只读）",
+  "version": "1.0.0",
+  "author": "LogAgent",
+  "description": "解析并下载已分享到 mclo.gs 的 Minecraft 日志，供小炎在本地分析。只读通道：不上传内容、不调用云端 AI 分析。",
+  "type": "http",
+  "baseUrl": "https://api.mclo.gs",
+  "settings": [
+    {
+      "key": "timeoutSeconds",
+      "label": "请求读取超时（秒）",
+      "default": "60"
+    }
+  ],
+  "tools": [
+    {
+      "name": "mclogs_insights",
+      "description": "获取某条 mclo.gs 分享日志的结构化解析（JSON，含 analysis/problems/solutions）。参数为日志 id（mclo.gs/xxxx 链接中的 xxxx）。",
+      "method": "GET",
+      "path": "/1/insights/{id}",
+      "params": [
+        {
+          "name": "id",
+          "description": "日志 id（mclo.gs 链接尾部那串字符）",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "mclogs_raw",
+      "description": "获取某条 mclo.gs 分享日志的原始文本全文（用于阅读日志内容并自行分析）。参数为日志 id。",
+      "method": "GET",
+      "path": "/1/raw/{id}",
+      "params": [
+        {
+          "name": "id",
+          "description": "日志 id（mclo.gs 链接尾部那串字符）",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

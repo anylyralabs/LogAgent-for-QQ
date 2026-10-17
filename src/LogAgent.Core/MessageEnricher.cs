@@ -27,10 +27,12 @@ public sealed class MessageEnricher
     private readonly HttpClient _http;         // 小请求（insights 等，30s）
     private readonly HttpClient _downloadHttp; // 大内容下载（raw 全文 / 文件流式落盘，10 分钟）
     private readonly string _filesDir;
+    private readonly string _mcLogsBase;
 
-    public MessageEnricher(string logShareBase = "https://api.logshare.cn", HttpClient? http = null, string? filesDir = null)
+    public MessageEnricher(string logShareBase = "https://api.logshare.cn", HttpClient? http = null, string? filesDir = null, string? mcLogsBase = null)
     {
         _logShareBase = logShareBase.TrimEnd('/');
+        _mcLogsBase = (mcLogsBase ?? "https://api.mclo.gs").TrimEnd('/');
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         _downloadHttp = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         _filesDir = filesDir ?? Path.Combine(AppConfigStore.GetConfigDirectory(), "files");
@@ -41,16 +43,25 @@ public sealed class MessageEnricher
     /// <summary>文件暂存目录（QQ 文件与抓取日志完整落盘处）。</summary>
     public string FilesDir => _filesDir;
 
-    private static readonly Regex LogShareLink = new(
-        @"https?://(?:www\.)?logshare\.cn/(?:v1/(?:raw|log|insights|ai)/)?([A-Za-z0-9]{5,16})",
+    /// <summary>
+    /// 共享日志平台链接（raw + insights 端点同构，可互换）：
+    /// logshare.cn（/v1）、mclo.gs 与 api.mclo.gs（/1）。
+    /// </summary>
+    private static readonly Regex SharedLogLink = new(
+        @"https?://(?:www\.)?(?:logshare\.cn(?:/v1/(?:raw|log|insights|ai))?|mclo\.gs(?:/1/(?:raw|insights))?|api\.mclo\.gs/1/(?:raw|insights))/(?<id>[A-Za-z0-9]{4,16})",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>富化消息文本：无链接/附件时原样返回。</summary>
     public async Task<string> EnrichTextAsync(BotMessage message, CancellationToken ct = default)
     {
         var blocks = new List<string>();
-        foreach (var id in LogShareLink.Matches(message.Text).Select(m => m.Groups[1].Value).Distinct())
-            blocks.Add(await FetchLogShareAsync(id, ct));
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in SharedLogLink.Matches(message.Text).Cast<Match>())
+        {
+            var key = m.Value.Contains("logshare", StringComparison.OrdinalIgnoreCase) ? "logshare" : "mclogs";
+            if (!seen.Add($"{key}:{m.Groups["id"].Value}")) continue;
+            blocks.Add(await FetchSharedLogAsync(key, m.Groups["id"].Value, ct));
+        }
         if (message.Attachments is { Count: > 0 })
         {
             foreach (var attachment in message.Attachments)
@@ -61,16 +72,25 @@ public sealed class MessageEnricher
         return message.Text.Length == 0 ? appended : message.Text + "\n\n" + appended;
     }
 
-    /// <summary>抓取 LogShare 日志（原文 + 结构化解析）；长文完整落盘，模型用工具查看。</summary>
-    public async Task<string> FetchLogShareAsync(string id, CancellationToken ct)
+    /// <summary>兼容入口：抓取 LogShare 日志。</summary>
+    public Task<string> FetchLogShareAsync(string id, CancellationToken ct) => FetchSharedLogAsync("logshare", id, ct);
+
+    /// <summary>抓取共享日志平台日志（原文 + 结构化解析）；长文完整落盘，模型用工具查看。</summary>
+    public async Task<string> FetchSharedLogAsync(string providerKey, string id, CancellationToken ct)
     {
+        var isLogShare = providerKey == "logshare";
+        var label = isLogShare ? "LogShare" : "mclo.gs";
+        var tag = isLogShare ? "LogShare" : "McLogs";
+        var baseUrl = isLogShare ? _logShareBase : _mcLogsBase;
+        var seg = isLogShare ? "/v1" : "/1";
+        var web = isLogShare ? $"https://logshare.cn/{id}" : $"https://mclo.gs/{id}";
         try
         {
-            var raw = await _downloadHttp.GetStringAsync($"{_logShareBase}/v1/raw/{id}", ct);
+            var raw = await _downloadHttp.GetStringAsync($"{baseUrl}{seg}/raw/{id}", ct);
             var insights = "";
             try
             {
-                insights = await _http.GetStringAsync($"{_logShareBase}/v1/insights/{id}", ct);
+                insights = await _http.GetStringAsync($"{baseUrl}{seg}/insights/{id}", ct);
             }
             catch (Exception)
             {
@@ -80,21 +100,21 @@ public sealed class MessageEnricher
             if (raw.Length <= MaxInlineChars)
             {
                 var sb = new StringBuilder();
-                sb.AppendLine($"【已从 LogShare 链接抓取（id={id}，网页 https://logshare.cn/{id}）】");
+                sb.AppendLine($"【已从 {label} 链接抓取（id={id}，网页 {web}）】");
                 if (insights.Length is > 0 and <= 1200) sb.AppendLine($"· 结构化解析：{insights}");
                 sb.AppendLine("· 日志正文：");
                 sb.Append(raw);
-                Log($"[LogShare] 抓取 {id} 成功（{raw.Length} 字符，全文内联）");
+                Log($"[{tag}] 抓取 {id} 成功（{raw.Length} 字符，全文内联）");
                 return sb.ToString();
             }
 
             // 长日志：全文落盘 + 头尾片段 + 工具指引（中间内容不丢）
-            var path = StagedPath($"logshare-{id}.log");
+            var path = StagedPath($"{providerKey}-{id}.log");
             await File.WriteAllTextAsync(path, raw, ct);
             var lineCount = raw.Count(c => c == '\n') + 1;
             var block = new StringBuilder();
-            block.AppendLine($"【已从 LogShare 链接抓取全文并保存（id={id}）】（{FormatSize(Encoding.UTF8.GetByteCount(raw))} · 约 {lineCount} 行）");
-            block.AppendLine($"网页：https://logshare.cn/{id} · 本机路径：{path}");
+            block.AppendLine($"【已从 {label} 链接抓取全文并保存（id={id}）】（{FormatSize(Encoding.UTF8.GetByteCount(raw))} · 约 {lineCount} 行）");
+            block.AppendLine($"网页：{web} · 本机路径：{path}");
             if (insights.Length is > 0 and <= 1200) block.AppendLine($"· 结构化解析：{insights}");
             block.AppendLine("全文都在本地文件里，中间内容不会丢——请用工具按需查看（不要只凭片段下结论）：");
             block.AppendLine(ToolsHint());
@@ -102,13 +122,13 @@ public sealed class MessageEnricher
             block.AppendLine(HeadSnippet(raw));
             block.AppendLine("--- 结尾片段 ---");
             block.Append(TailSnippet(raw));
-            Log($"[LogShare] 抓取 {id} 成功（{raw.Length} 字符，全文已保存）");
+            Log($"[{tag}] 抓取 {id} 成功（{raw.Length} 字符，全文已保存）");
             return block.ToString();
         }
         catch (Exception ex)
         {
-            Log($"[LogShare] 抓取 {id} 失败：{ex.Message}");
-            return $"【LogShare 链接（{id}）抓取失败：{ex.Message}——若用户需要分析，请他直接把日志文本发出来】";
+            Log($"[{tag}] 抓取 {id} 失败：{ex.Message}");
+            return $"【{label} 链接（id={id}）抓取失败：{ex.Message}】\n可请用户直接把日志文本粘贴出来，或改用 logshare.cn 分享后再发链接。";
         }
     }
 
