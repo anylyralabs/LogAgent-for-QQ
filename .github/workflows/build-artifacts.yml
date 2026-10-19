@@ -255,10 +255,15 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Download all artifacts
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           path: all
+          # 只拉我们自己上传的产物：docker/build-push-action 的 GHA 缓存会生成
+          # lemwoods~LogAgent-for-QQ~*.dockerbuild 这类内部 artifact，
+          # 全量 pattern 下载会把它一并拉下来并因体积/结构失败。
+          pattern: logagent-*
+          merge-multiple: false
 
       - name: Assert expected artifacts present
         run: |
