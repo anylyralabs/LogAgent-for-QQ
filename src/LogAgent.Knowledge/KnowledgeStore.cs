@@ -108,39 +108,74 @@ public sealed class KnowledgeStore(string dbPath, KnowledgeConfig config, ModelR
         }
         if (ftsCols.Count == 0)
         {
-            Exec(conn, """
-                CREATE VIRTUAL TABLE knowledge_fts USING fts5(
-                    search_title, search_body, content='knowledge_items', content_rowid='id');
-                """);
+            try
+            {
+                Exec(conn, """
+                    CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+                        search_title, search_body, content='knowledge_items', content_rowid='id');
+                    """);
+            }
+            catch (SqliteException ex)
+            {
+                // 精简版 SQLite（部分 Linux 发行版/Armbian 镜像的 e_sqlite3 未编译 FTS5）：
+                // 不阻断启动，检索自动退化为 LIKE（SearchFts 会因表缺失抛异常并被 catch）。
+                _ftsAvailable = false;
+                Log($"FTS5 不可用，关键词检索降级为 LIKE：{ex.Message}");
+                return;
+            }
         }
 
         // 5) 触发器：同步 FTS（携带检索列）
-        Exec(conn, """
-            CREATE TRIGGER knowledge_ai AFTER INSERT ON knowledge_items BEGIN
-                INSERT INTO knowledge_fts(rowid, search_title, search_body)
-                VALUES (new.id, new.search_title, new.search_body);
-            END;
-            CREATE TRIGGER knowledge_ad AFTER DELETE ON knowledge_items BEGIN
-                INSERT INTO knowledge_fts(knowledge_fts, rowid, search_title, search_body)
-                VALUES ('delete', old.id, old.search_title, old.search_body);
-            END;
-            CREATE TRIGGER knowledge_au AFTER UPDATE OF search_title, search_body ON knowledge_items BEGIN
-                INSERT INTO knowledge_fts(knowledge_fts, rowid, search_title, search_body)
-                VALUES ('delete', old.id, old.search_title, old.search_body);
-                INSERT INTO knowledge_fts(rowid, search_title, search_body)
-                VALUES (new.id, new.search_title, new.search_body);
-            END;
-            """);
+        try
+        {
+            Exec(conn, """
+                CREATE TRIGGER knowledge_ai AFTER INSERT ON knowledge_items BEGIN
+                    INSERT INTO knowledge_fts(rowid, search_title, search_body)
+                    VALUES (new.id, new.search_title, new.search_body);
+                END;
+                CREATE TRIGGER knowledge_ad AFTER DELETE ON knowledge_items BEGIN
+                    INSERT INTO knowledge_fts(knowledge_fts, rowid, search_title, search_body)
+                    VALUES ('delete', old.id, old.search_title, old.search_body);
+                END;
+                CREATE TRIGGER knowledge_au AFTER UPDATE OF search_title, search_body ON knowledge_items BEGIN
+                    INSERT INTO knowledge_fts(knowledge_fts, rowid, search_title, search_body)
+                    VALUES ('delete', old.id, old.search_title, old.search_body);
+                    INSERT INTO knowledge_fts(rowid, search_title, search_body)
+                    VALUES (new.id, new.search_title, new.search_body);
+                END;
+                """);
+        }
+        catch (SqliteException ex)
+        {
+            _ftsAvailable = false;
+            Log($"FTS 触发器创建失败，关键词检索降级为 LIKE：{ex.Message}");
+            return;
+        }
+        _ftsAvailable = true;
 
         // 6) 索引同步：行数不一致 → 全量重建（幂等，小库毫秒级）
-        var baseCount = ScalarLong(conn, "SELECT COUNT(*) FROM knowledge_items");
-        var ftsCount = ScalarLong(conn, "SELECT COUNT(*) FROM knowledge_fts");
-        if (baseCount != ftsCount)
+        try
         {
-            Exec(conn, "INSERT INTO knowledge_fts(knowledge_fts) VALUES('rebuild');");
-            Log($"知识库索引重建：{baseCount} 条");
+            var baseCount = ScalarLong(conn, "SELECT COUNT(*) FROM knowledge_items");
+            var ftsCount = ScalarLong(conn, "SELECT COUNT(*) FROM knowledge_fts");
+            if (baseCount != ftsCount)
+            {
+                Exec(conn, "INSERT INTO knowledge_fts(knowledge_fts) VALUES('rebuild');");
+                Log($"知识库索引重建：{baseCount} 条");
+            }
+        }
+        catch (SqliteException ex)
+        {
+            _ftsAvailable = false;
+            Log($"FTS 索引同步失败，关键词检索降级为 LIKE：{ex.Message}");
         }
     }
+
+    /// <summary>FTS5 是否可用（精简镜像可能未编入；不可用时检索自动走 LIKE）。</summary>
+    private bool _ftsAvailable = true;
+
+    /// <summary>当前检索是否启用 FTS（doctor/UI 可读）。</summary>
+    public bool IsFtsAvailable => _ftsAvailable;
 
     /// <summary>老数据补算检索列（迁移用；新库为空时零开销）。</summary>
     private void BackfillSearchColumns(SqliteConnection conn)
@@ -331,6 +366,7 @@ public sealed class KnowledgeStore(string dbPath, KnowledgeConfig config, ModelR
     /// <summary>FTS 检索：CJK 二元组 + ASCII 词元，BM25 排序（标题权重 10、正文 1）。</summary>
     private List<KnowledgeItem> SearchFts(List<string> tokens, int limit)
     {
+        if (!_ftsAvailable) return [];
         var match = KnowledgeText.BuildMatchQuery(tokens);
         if (match is null) return [];
         try

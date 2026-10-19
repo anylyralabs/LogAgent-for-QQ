@@ -1,0 +1,104 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+             x:Class="LogAgent.Desktop.Views.ChatView"
+             x:DataType="vm:ChatViewModel">
+    <Grid ColumnDefinitions="*,16,300">
+        <!-- 对话主区 -->
+        <Border Grid.Column="0" Classes="card" Padding="0">
+            <Grid RowDefinitions="*,Auto">
+                <ScrollViewer x:Name="MessagesScroll" Grid.Row="0" Padding="16"
+                              VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Messages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ChatMessage">
+                                <Grid Margin="0,0,0,12">
+                                    <!-- 系统提示 -->
+                                    <TextBlock Text="{Binding Text}"
+                                               HorizontalAlignment="Center" TextAlignment="Center"
+                                               TextWrapping="Wrap" FontSize="12"
+                                               Foreground="{DynamicResource TextTertiary}"
+                                               IsVisible="{Binding IsNote}"/>
+                                    <!-- 用户气泡 -->
+                                    <Border HorizontalAlignment="Right" MaxWidth="440"
+                                            Background="{DynamicResource AccentFill}" CornerRadius="10,10,3,10"
+                                            Padding="12,8" IsVisible="{Binding IsUser}">
+                                        <StackPanel Spacing="3">
+                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextOnAccent}" FontSize="13.5"/>
+                                            <TextBlock Text="{Binding TimeText}" FontSize="10"
+                                                       HorizontalAlignment="Right" Opacity="0.75"
+                                                       Foreground="{DynamicResource TextOnAccent}"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <!-- 机器人气泡 -->
+                                    <Border HorizontalAlignment="Left" MaxWidth="440"
+                                            Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource CardStroke}" BorderThickness="1"
+                                            CornerRadius="10,10,10,3" Padding="12,8"
+                                            IsVisible="{Binding IsAgent}">
+                                        <StackPanel Spacing="3">
+                                            <TextBlock Text="小炎" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AccentText}"/>
+                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="13.5"/>
+                                            <TextBlock Text="{Binding TimeText}" FontSize="10"
+                                                       HorizontalAlignment="Right"
+                                                       Foreground="{DynamicResource TextTertiary}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Border Grid.Row="1" BorderBrush="{DynamicResource DividerStroke}" BorderThickness="0,1,0,0"
+                        Padding="12">
+                    <Grid ColumnDefinitions="*,10,Auto" RowDefinitions="Auto,Auto">
+                        <TextBox x:Name="InputBox" Grid.Row="0" Grid.Column="0" MinHeight="38" MaxHeight="120"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 Watermark="问点什么…（Enter 发送，Shift+Enter 换行）"
+                                 Text="{Binding Input, Mode=TwoWay}"/>
+                        <Button Grid.Row="0" Grid.Column="2" Content="发送" MinWidth="76" Height="38"
+                                Command="{Binding SendCommand}"/>
+                        <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Margin="2,6,0,0" FontSize="11"
+                                   Foreground="{DynamicResource TextTertiary}"
+                                   Text="与 QQ 消息共用同一条处理管线（会话记忆 / 知识库 / 日志分析）"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- 右栏：快捷操作与状态 -->
+        <ScrollViewer Grid.Column="2">
+            <StackPanel Spacing="12">
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="快捷输入" Classes="section"/>
+                        <Button Content="打个招呼" HorizontalAlignment="Stretch"
+                                Click="QuickInput_Click" Tag="你好"/>
+                        <Button Content="示例日志分析" HorizontalAlignment="Stretch"
+                                Click="QuickInput_Click"
+                                Tag="分析日志&#10;ERROR 2026-10-15 14:20:01 [db-pool] connection timeout after 30000ms host=10.0.0.8&#10;   at com.app.Db.GetConnection(Db.java:88)&#10;   at com.app.Api.Handle(Api.java:42)&#10;   at com.app.Main.Run(Main.java:17)"/>
+                        <Button Content="记住一条知识" HorizontalAlignment="Stretch"
+                                Click="QuickInput_Click"
+                                Tag="记住：数据库连接池耗尽时，优先检查 maxActive 与等待超时配置"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="会话操作" Classes="section"/>
+                        <Button Content="新话题（切段会话）" HorizontalAlignment="Stretch"
+                                Command="{Binding NewTopicCommand}"/>
+                        <Button Content="清空显示" HorizontalAlignment="Stretch"
+                                Command="{Binding ClearCommand}"/>
+                        <TextBlock Text="切段会把当前窗口压缩为 L1 摘要后落库，之后的问题不再带旧上下文。"
+                                   FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextTertiary}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

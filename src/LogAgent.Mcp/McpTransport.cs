@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using LogAgent.Shared.Configuration;
+using LogAgent.Shared.Platform;
 
 namespace LogAgent.Mcp;
 
@@ -138,12 +139,18 @@ public sealed class StdioTransport(McpServerEntry config) : IMcpTransport
     /// <summary>
     /// 解析可执行入口：Windows 下在 PATH 中找 .exe/.cmd/.bat；
     /// 命中 .cmd/.bat（如 npx.cmd）时用 cmd.exe 包裹（CreateProcess 不识别批处理）。
+    /// Unix 下直接执行，但会校验脚本的可执行位（缺少时给出 chmod +x 提示）。
     /// </summary>
     internal static (string FileName, string Arguments) ResolveLaunch(string command, string args)
     {
         var cmd = command.Trim();
         var arguments = args.Trim();
-        if (!OperatingSystem.IsWindows()) return (cmd, arguments);
+        if (PlatformInfo.IsUnix)
+        {
+            if (cmd.Contains('/') && File.Exists(cmd) && !HasExecutePermission(cmd))
+                throw new InvalidOperationException($"命令缺少执行权限：{cmd}（执行 chmod +x \"{cmd}\" 后重试）");
+            return (cmd, arguments);
+        }
 
         var exe = FindExecutable(cmd);
         if (exe is null) return (cmd, arguments);
@@ -158,14 +165,31 @@ public sealed class StdioTransport(McpServerEntry config) : IMcpTransport
         return (exe, arguments);
     }
 
-    /// <summary>在 PATH 中查找命令（优先 .exe，其次 .cmd/.bat，最后无扩展名）。</summary>
+    /// <summary>Unix 下判断文件是否带执行位（Windows / 非 Unix 文件系统视为可执行）。</summary>
+    internal static bool HasExecutePermission(string path)
+    {
+        if (!PlatformInfo.IsUnix) return true;
+        try
+        {
+            var mode = File.GetUnixFileMode(path);
+            return (mode & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return true; // 无法读取权限位时不阻断（交由真实启动失败给出错误）
+        }
+    }
+
+    /// <summary>在 PATH 中查找命令（Windows 优先 .exe，其次 .cmd/.bat，最后无扩展名；Unix 只按原名）。</summary>
     internal static string? FindExecutable(string command)
     {
         if (command.Contains('\\') || command.Contains('/'))
             return File.Exists(command) ? Path.GetFullPath(command) : null;
 
         var path = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var ext in new[] { ".exe", ".cmd", ".bat", "" })
+        // Windows 优先 .exe/.cmd/.bat；Unix 只按原名查找（扩展名无执行语义）
+        var extensions = PlatformInfo.IsUnix ? new[] { "" } : new[] { ".exe", ".cmd", ".bat", "" };
+        foreach (var ext in extensions)
         {
             foreach (var dir in path.Split(Path.PathSeparator))
             {

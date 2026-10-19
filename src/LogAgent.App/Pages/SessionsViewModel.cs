@@ -67,7 +67,7 @@ public sealed class SessionsViewModel : ObservableObject
             _ => LogAgent.Training.ExportFormat.OpenAiChat,
         };
 
-        var db = new Database(Path.Combine(AppConfigStore.GetConfigDirectory(), "data", "logagent.db"));
+        var db = new Database(Path.Combine(AppConfigStore.GetDataDirectory(), "logagent.db"));
         var exporter = new LogAgent.Training.TrainingExporter(new SessionStore(db));
         var result = await exporter.ExportAsync(dialog.FileName, new LogAgent.Training.TrainingExporter.ExportOptions(
             format, ["none", "adopted"], Redact: true));
@@ -80,7 +80,7 @@ public sealed class SessionsViewModel : ObservableObject
     {
         try
         {
-            var db = new Database(Path.Combine(AppConfigStore.GetConfigDirectory(), "data", "logagent.db"));
+            var db = new Database(Path.Combine(AppConfigStore.GetDataDirectory(), "logagent.db"));
             db.EnsureCreated();
             return new SessionStore(db);
         }

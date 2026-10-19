@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+             x:Class="LogAgent.Desktop.Views.ProvidersView"
+             x:DataType="vm:ProvidersViewModel">
+    <Grid ColumnDefinitions="*,16,320">
+        <ScrollViewer Grid.Column="0">
+            <StackPanel Spacing="14">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="模型路由" Classes="title"/>
+                    <TextBlock Classes="subtitle"
+                               Text="任意 OpenAI 兼容端点；按任务类型配置优先链，失败自动切换下一个 Provider。"/>
+                </StackPanel>
+
+                <Border Classes="card" Padding="0">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="16,14,16,8" Spacing="10">
+                            <TextBlock Text="Provider" Classes="section" VerticalAlignment="Center"/>
+                            <Button Content="刷新" Command="{Binding ReloadCommand}" Padding="10,3"/>
+                            <Button Content="测试选中连接" Command="{Binding TestCommand}" Padding="10,3"/>
+                        </StackPanel>
+                        <DataGrid ItemsSource="{Binding Providers}" SelectedItem="{Binding Selected}"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                  BorderThickness="0" MinHeight="140">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="模型" Binding="{Binding Model}" Width="150"/>
+                                <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="70"/>
+                                <DataGridTextColumn Header="备注" Binding="{Binding Badge}" Width="90"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="分流规则" Classes="section"/>
+                        <ItemsControl ItemsSource="{Binding Rules}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RuleItem">
+                                    <Grid ColumnDefinitions="140,*" Margin="0,3">
+                                        <TextBlock Grid.Column="0" Text="{Binding TaskType}" Classes="label"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Chain}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Column="2">
+            <StackPanel Spacing="12">
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="连接测试" Classes="section"/>
+                        <TextBlock Text="{Binding TestResult}" TextWrapping="Wrap" FontSize="12"/>
+                        <TextBlock Text="测试会真实请求 Provider（消耗少量 token）。"
+                                   FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextTertiary}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="配置文件" Classes="section"/>
+                        <TextBlock Text="{Binding ConfigPath}" FontFamily="monospace" FontSize="11"
+                                   TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}"/>
+                        <Button Content="打开配置目录" Command="{Binding OpenConfigCommand}"
+                                HorizontalAlignment="Stretch"/>
+                        <TextBlock Text="跨平台壳暂不支持在界面内新增/编辑 Provider，请编辑 config.json 后点「刷新」。"
+                                   FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextTertiary}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

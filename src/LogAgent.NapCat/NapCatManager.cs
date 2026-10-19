@@ -2,13 +2,15 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using LogAgent.Shared.Configuration;
+using LogAgent.Shared.Platform;
 
 namespace LogAgent.NapCat;
 
 /// <summary>
-/// NapCat 进程托管：以「启动脚本」为入口（用户直接选择 napcat.bat / launcher.bat / .exe），
-/// 工作目录取脚本所在目录；支持 webui.json 自动读取 Token；进程 stdout/stderr 全量接入日志（日志绑定）。
-/// Windows 桌面形态托管本地 NapCat（Shell 版）；Linux 无头形态建议直接用 NapCat Docker。
+/// NapCat 进程托管：以「启动脚本」为入口（Windows：napcat.bat / launcher.bat / .exe；
+/// Linux：napcat.sh / start.sh 等可执行脚本），工作目录取脚本所在目录；
+/// 支持 webui.json 自动读取 Token；进程 stdout/stderr 全量接入日志（日志绑定）。
+/// Windows 桌面形态托管本地 NapCat（Shell 版）；Linux 可托管 Shell 脚本，也可直接用 NapCat Docker。
 /// </summary>
 public sealed class NapCatManager
 {
@@ -22,6 +24,9 @@ public sealed class NapCatManager
 
     public NapCatManager(NapCatConfig config) => Config = config;
 
+    /// <summary>本机是否运行 Windows（决定启动方式与进程探测实现）。</summary>
+    public static bool IsWindowsHost => PlatformInfo.Current == OsFamily.Windows;
+
     /// <summary>启动脚本已配置且文件存在。</summary>
     public bool IsInstalled =>
         !string.IsNullOrWhiteSpace(Config.ScriptPath) && File.Exists(Config.ScriptPath);
@@ -31,7 +36,27 @@ public sealed class NapCatManager
 
     /// <summary>系统里存在 NapCat 引导进程（避免应用重启后重复拉起）。</summary>
     private static bool ExternalNapCatExists()
-        => Process.GetProcessesByName("NapCatWinBootMain").Length > 0;
+    {
+        if (IsWindowsHost)
+            return Process.GetProcessesByName("NapCatWinBootMain").Length > 0;
+
+        // Linux：NapCat 桌面版（LinuxQQ + NapCat）主进程名通常是 napcat / NapCat；
+        // 只做「是否存在」判定，不主动杀进程（StopAsync 里再按特征清理）。
+        foreach (var proc in Process.GetProcesses())
+        {
+            var name = NameOf(proc);
+            if (name is "napcat" or "NapCat" or "NapCatWinBootMain") return true;
+        }
+        return false;
+    }
+
+    /// <summary>取进程名（拿不到时返回空串；调用即释放句柄）。</summary>
+    private static string NameOf(Process p)
+    {
+        try { return p.ProcessName; }
+        catch (Exception) { return ""; }
+        finally { p.Dispose(); }
+    }
 
     public string? WebUiToken
     {
@@ -51,7 +76,7 @@ public sealed class NapCatManager
 
     public event EventHandler<string>? ManagerLog;
 
-    /// <summary>把「反向 WS 连接"补入"到 NapCat 配置（模板 + 所有已登录账号），返回更新的文件数。</summary>
+    /// <summary>把「反向 WS 连接」补入到 NapCat 配置（模板 + 所有已登录账号），返回更新的文件数。</summary>
     public int InjectReverseWsConfig(int port, string token)
     {
         var count = NapCatConfigWriter.EnsureReverseWs(Config.ResolveDirectory(), port, token).Count;
@@ -61,11 +86,9 @@ public sealed class NapCatManager
         return count;
     }
 
-    /// <summary>按启动脚本拉起 NapCat（.bat/.cmd 经 cmd 执行；stdout/stderr 实时转发到日志）。</summary>
+    /// <summary>按启动脚本拉起 NapCat（Windows 的 .bat/.cmd 经 cmd 执行；Unix 脚本直接执行）。</summary>
     public Task StartAsync(CancellationToken ct = default)
     {
-        if (!OperatingSystem.IsWindows())
-            throw new PlatformNotSupportedException("本机进程托管仅支持 Windows；Linux 请使用 NapCat Docker + 远程 WebUI 对接");
         if (string.IsNullOrWhiteSpace(Config.ScriptPath))
             throw new InvalidOperationException("未配置 NapCat 启动脚本（请在「OneBot 连接」页选择）");
         if (!File.Exists(Config.ScriptPath))
@@ -76,10 +99,19 @@ public sealed class NapCatManager
             return Task.CompletedTask;
         }
 
+        var psi = BuildStartInfo(Config.ScriptPath);
+        _process = Process.Start(psi) ?? throw new InvalidOperationException("NapCat 启动失败");
+        ManagerLog?.Invoke(this, $"NapCat 已启动（脚本 {Path.GetFileName(Config.ScriptPath)}，PID {_process.Id}）");
+
+        // 日志绑定：持续读取进程输出并转发（进程退出后泵自动结束）
+        _outputPump = Task.Run(() => PumpOutputAsync(_process, ct), CancellationToken.None);
+        return Task.CompletedTask;
+    }
+
+    private ProcessStartInfo BuildStartInfo(string scriptPath)
+    {
         var psi = new ProcessStartInfo
         {
-            FileName = "cmd.exe",
-            Arguments = $"/c \"{Config.ScriptPath}\"",
             WorkingDirectory = Config.ResolveDirectory(),
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -88,12 +120,48 @@ public sealed class NapCatManager
             StandardErrorEncoding = Encoding.UTF8,
             CreateNoWindow = true,
         };
-        _process = Process.Start(psi) ?? throw new InvalidOperationException("NapCat 启动失败");
-        ManagerLog?.Invoke(this, $"NapCat 已启动（脚本 {Path.GetFileName(Config.ScriptPath)}，PID {_process.Id}）");
 
-        // 日志绑定：持续读取进程输出并转发（进程退出后泵自动结束）
-        _outputPump = Task.Run(() => PumpOutputAsync(_process, ct), CancellationToken.None);
-        return Task.CompletedTask;
+        if (IsWindowsHost)
+        {
+            psi.FileName = "cmd.exe";
+            psi.Arguments = $"/c \"{scriptPath}\"";
+            return psi;
+        }
+
+        var ext = Path.GetExtension(scriptPath).ToLowerInvariant();
+        switch (ext)
+        {
+            case ".sh":
+                psi.FileName = File.Exists("/bin/sh") ? "/bin/sh" : "/bin/bash";
+                psi.ArgumentList.Add(scriptPath);
+                break;
+            case ".exe":
+                // Windows 可执行文件在 Linux 上只在 mono/wine 下有意义，直接执行会得到明确的 ENOEXEC
+                psi.FileName = scriptPath;
+                break;
+            default:
+                // 无扩展名或其它脚本：直接执行（依赖 shebang 与可执行位）
+                if (!HasExecutePermission(scriptPath))
+                    throw new InvalidOperationException(
+                        $"启动脚本缺少执行权限：{scriptPath}（执行 chmod +x \"{scriptPath}\" 后重试）");
+                psi.FileName = scriptPath;
+                break;
+        }
+        return psi;
+    }
+
+    private static bool HasExecutePermission(string path)
+    {
+        if (IsWindowsHost) return true;
+        try
+        {
+            var mode = File.GetUnixFileMode(path);
+            return (mode & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return true;
+        }
     }
 
     private async Task PumpOutputAsync(Process process, CancellationToken ct)
@@ -132,12 +200,23 @@ public sealed class NapCatManager
         _process = null;
         _outputPump = null;
 
-        // 兜底清理：NapCat 引导进程可能已脱离 cmd 进程树（bat 内 start），按其专属特征清理
-        KillIf("NapCatWinBootMain", _ => true, "NapCat 引导进程");
-        KillIf("QQ", cmd => cmd.Contains("--enable-logging", StringComparison.OrdinalIgnoreCase),
-            "NapCat 注入的 QQ 主进程");
-        KillIf("cmd", cmd => cmd.Contains("launcher.bat", StringComparison.OrdinalIgnoreCase),
-            "NapCat 启动器 cmd");
+        // 兜底清理：NapCat 引导进程可能已脱离启动器进程树（bat/sh 内 start &），按其专属特征清理。
+        // 只在 Windows 上按进程名清理：Linux 上同名的 QQ 进程属于用户的其它登录实例，
+        // 误杀代价高，交由用户的 systemd/docker 生命周期管理。
+        if (IsWindowsHost)
+        {
+            KillIf("NapCatWinBootMain", _ => true, "NapCat 引导进程");
+            KillIf("QQ", cmd => cmd.Contains("--enable-logging", StringComparison.OrdinalIgnoreCase),
+                "NapCat 注入的 QQ 主进程");
+            KillIf("cmd", cmd => cmd.Contains("launcher.bat", StringComparison.OrdinalIgnoreCase),
+                "NapCat 启动器 cmd");
+        }
+        else
+        {
+            // Unix：只清理我们自己拉起的进程树（上面已 Kill(entireProcessTree)），外加 NapCat 主进程名精确匹配
+            KillIf("napcat", _ => true, "NapCat 进程");
+            KillIf("NapCat", _ => true, "NapCat 进程");
+        }
 
         ManagerLog?.Invoke(this, "NapCat 已停止");
         return Task.CompletedTask;
@@ -159,8 +238,27 @@ public sealed class NapCatManager
         }
     }
 
+    /// <summary>读取进程命令行：Windows 走 WMI，Unix 读 /proc/{pid}/cmdline（权限不足时返回空）。</summary>
     private static string GetCommandLine(int pid)
     {
+        if (!IsWindowsHost)
+        {
+            try
+            {
+                var path = $"/proc/{pid}/cmdline";
+                if (!File.Exists(path)) return "";
+                // /proc/*/cmdline 用 NUL 分隔参数
+                return File.ReadAllText(path).Replace('\0', ' ');
+            }
+            catch (Exception)
+            {
+                return "";
+            }
+        }
+
+        // Windows 实现：System.Management 是跨平台包，非 Windows 调用会抛 PlatformNotSupportedException，
+        // 因此用运行时守卫（上面的提前返回）而不是条件编译——项目 TFM 保持 net10.0，双平台同一份代码。
+#pragma warning disable CA1416 // 只在 Windows 分支执行（运行时已守卫）
         try
         {
             using var searcher = new System.Management.ManagementObjectSearcher(
@@ -169,6 +267,7 @@ public sealed class NapCatManager
                 return obj["CommandLine"]?.ToString() ?? "";
         }
         catch (Exception) { }
+#pragma warning restore CA1416
         return "";
     }
 }

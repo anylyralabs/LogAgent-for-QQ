@@ -14,5 +14,7 @@
 本目录即一个技能包：`skill.json` 定义元信息 + 工具（HTTP 调用模板），占位符
 `{参数名}`（工具参数）与 `{setting.键}`（技能设置）在执行时替换。写法参考 logshare 技能的 README。
 
-安装方式：技能商店「从文件安装」（zip / 目录）或直接把技能目录放进
-`%AppData%\LogAgent\skills\` 后点「刷新」。
+安装方式：技能商店「从文件安装」（zip / 目录）或直接把技能目录放进用户技能目录后点「刷新」。
+
+- Windows：`%AppData%\LogAgent\skills\`
+- Linux / macOS：`~/.config/LogAgent/skills/`（或 `$LOGAGENT_CONFIG_DIR/skills/`）

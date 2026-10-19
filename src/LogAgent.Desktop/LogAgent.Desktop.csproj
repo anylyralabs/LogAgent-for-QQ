@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <!-- 绑定在运行时解析：避免不同 Avalonia 版本编译期绑定语法差异 -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <AssemblyTitle>LogAgent</AssemblyTitle>
+    <Product>LogAgent — QQ 日志分析助手</Product>
+    <Version>0.8.0</Version>
+    <ApplicationIcon>Assets/logo.ico</ApplicationIcon>
+    <!-- 跨平台桌面壳（Windows / Linux），独立于 WPF 壳 LogAgent.App；不加入 LogAgent.slnx，
+         以保证 Windows 主构建路径零改动。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.13" />
+    <!-- DataGrid 在 Avalonia 中独立成包，需同时引入主题 -->
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 图片等二进制资源需要显式声明（Avalonia 只自动包含 *.axaml） -->
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LogAgent.Shared\LogAgent.Shared.csproj" />
+    <ProjectReference Include="..\LogAgent.Core\LogAgent.Core.csproj" />
+    <ProjectReference Include="..\LogAgent.Routing\LogAgent.Routing.csproj" />
+    <ProjectReference Include="..\LogAgent.Memory\LogAgent.Memory.csproj" />
+    <ProjectReference Include="..\LogAgent.Knowledge\LogAgent.Knowledge.csproj" />
+    <ProjectReference Include="..\LogAgent.Connections\LogAgent.Connections.csproj" />
+    <ProjectReference Include="..\LogAgent.NapCat\LogAgent.NapCat.csproj" />
+    <ProjectReference Include="..\LogAgent.Sandbox\LogAgent.Sandbox.csproj" />
+    <ProjectReference Include="..\LogAgent.Skills\LogAgent.Skills.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 内置技能随程序发布（与 WPF 壳同一份目录） -->
+    <Content Include="..\LogAgent.App\skills\**\*" Link="skills\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

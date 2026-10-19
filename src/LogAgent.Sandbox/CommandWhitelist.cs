@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using LogAgent.Shared.Configuration;
+using LogAgent.Shared.Platform;
 
 namespace LogAgent.Sandbox;
 
@@ -23,10 +24,11 @@ public sealed class CommandWhitelist(SandboxConfig config)
                 return (false, $"命中黑名单规则：{pattern}");
 
         var executable = ExtractExecutable(trimmed);
-        // Windows 下 cmd 内建命令按白名单处理；带路径的取文件名
+        // 两个平台都按「首个 token 的名称」匹配白名单（cmd 内建命令与 POSIX 内建命令都按同名配置处理）；
+        // 带路径的取文件名（Windows 的 C:\x\grep.exe 与 Unix 的 /usr/bin/grep 同样处理）。
         var name = Path.GetFileName(executable.Trim('"')).ToLowerInvariant();
         if (!_whitelist.Contains(name))
-            return (false, $"可执行文件 {name} 不在白名单");
+            return (false, $"可执行文件 {name} 不在白名单（当前平台默认命令集见 {PlatformShell.Current.DisplayName}）");
         return (true, null);
     }
 

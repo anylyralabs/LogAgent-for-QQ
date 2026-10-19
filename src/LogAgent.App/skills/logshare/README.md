@@ -34,5 +34,7 @@
 }
 ```
 
-安装方式：技能商店「从文件安装」（zip / 目录）或直接把技能目录放进
-`%AppData%\LogAgent\skills\` 后点「刷新」。
+安装方式：技能商店「从文件安装」（zip / 目录）或直接把技能目录放进用户技能目录后点「刷新」。
+
+- Windows：`%AppData%\LogAgent\skills\`
+- Linux / macOS：`~/.config/LogAgent/skills/`（或 `$LOGAGENT_CONFIG_DIR/skills/`）

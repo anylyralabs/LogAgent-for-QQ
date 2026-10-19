@@ -145,7 +145,7 @@ public sealed class LogAnalysisAgent(
         try
         {
             if (!File.Exists(candidate)) return false;
-            var root = Path.GetFullPath(filesDir ?? Path.Combine(AppConfigStore.GetConfigDirectory(), "files"));
+            var root = Path.GetFullPath(filesDir ?? AppConfigStore.GetFilesDirectory());
             var full = Path.GetFullPath(candidate);
             if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return false;
             path = full;

@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using LogAgent.Sandbox;
 using LogAgent.Shared.Chat;
+using LogAgent.Shared.Platform;
 
 namespace LogAgent.Skills;
 
@@ -11,7 +12,7 @@ namespace LogAgent.Skills;
 /// 内置文件工具（模型驱动，全部限定在 QQ 文件暂存目录内）：
 /// · read_file  —— 按行区间读取文件的任意部分（offset/limit，带行号）；
 /// · search_file —— 搜索关键词（正则/原文自动回退），返回命中行号与上下文；
-/// · run_shell  —— 沙箱执行 Windows cmd 命令（白名单+黑名单+超时+审计），用于 findstr/type/python 等进一步处理。
+/// · run_shell  —— 在沙箱内执行命令（白名单+黑名单+超时+审计）；具体 shell 与可用命令按平台生成。
 /// 大日志完整落盘后，由模型自己决定「看哪一段、搜什么、跑什么命令」——不再由代码截取头尾省略中间。
 /// </summary>
 public sealed class FileTools(string filesDir, SandboxRunner? sandboxRunner = null)
@@ -44,9 +45,12 @@ public sealed class FileTools(string filesDir, SandboxRunner? sandboxRunner = nu
         };
         if (shellEnabled && sandboxRunner is not null)
         {
+            var shell = PlatformShell.Current;
             tools.Add(new ChatToolDefinition(RunShellTool,
-                "在 files 目录执行 Windows cmd 命令做日志分析（工作目录即文件保存目录，用相对文件名即可）。可执行文件受沙箱白名单限制：findstr、find、type、more、sort、dir、python 等；示例：findstr /n /i \"Exception\" 文件名.log；more +100 文件名.log（从第 100 行看起）。超时约 30 秒、输出超限自动截断。参数：command。",
-                """{"type":"object","properties":{"command":{"type":"string","description":"要执行的 cmd 命令（工作目录为 files 目录）"}},"required":["command"]}"""));
+                $"在 files 目录执行{shell.DisplayName}命令做日志分析（工作目录即文件保存目录，用相对文件名即可）。" +
+                shell.RunShellHint +
+                "超时约 30 秒、输出超限自动截断。参数：command。",
+                """{"type":"object","properties":{"command":{"type":"string","description":"要执行的命令（工作目录为 files 目录）"}},"required":["command"]}"""));
         }
         return tools;
     }
@@ -257,7 +261,10 @@ public sealed class FileTools(string filesDir, SandboxRunner? sandboxRunner = nu
             return null;
         }
         var root = Path.GetFullPath(filesDir);
-        if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        var comparison = PlatformShell.Current.CaseSensitivePaths
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+        if (!full.StartsWith(root + Path.DirectorySeparatorChar, comparison))
         {
             error = $"只能访问 files 目录内的文件（{root}）。QQ 收到的文件与抓取的日志都保存在这里。";
             return null;
@@ -269,11 +276,15 @@ public sealed class FileTools(string filesDir, SandboxRunner? sandboxRunner = nu
         }
         if (!File.Exists(full))
         {
-            error = $"文件不存在：{full}。可用 run_shell 执行 dir 查看目录里的文件。";
+            error = $"文件不存在：{full}。可用 {ListFilesHint()} 查看目录里的文件。";
             return null;
         }
         return full;
     }
+
+    /// <summary>列目录命令（按平台给出可用写法）。</summary>
+    private static string ListFilesHint() =>
+        PlatformInfo.Current == OsFamily.Windows ? "run_shell 执行 dir" : "run_shell 执行 ls -l";
 
     private static IEnumerable<string> ReadLines(string path)
     {

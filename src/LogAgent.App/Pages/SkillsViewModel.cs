@@ -153,6 +153,9 @@ public sealed class SkillsViewModel : ObservableObject
     }
 
     public string CatalogUrl { get => _catalogUrl; set => Set(ref _catalogUrl, value); }
+
+    /// <summary>用户技能目录（按平台显示实际路径，替代写死的 %AppData% 文案）。</summary>
+    public string UserSkillsDir => UserDir();
     public string Status { get => _status; private set => Set(ref _status, value); }
     public string StoreStatus { get => _storeStatus; private set => Set(ref _storeStatus, value); }
     public string McpStatus { get => _mcpStatus; set => Set(ref _mcpStatus, value); }
@@ -259,7 +262,7 @@ public sealed class SkillsViewModel : ObservableObject
     {
         var dir = UserDir();
         Directory.CreateDirectory(dir);
-        Process.Start(new ProcessStartInfo("explorer.exe", dir) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
     }
 
     private async Task RefreshStoreAsync()
@@ -317,7 +320,7 @@ public sealed class SkillsViewModel : ObservableObject
     }
 
     private static string UserDir()
-        => Registry?.UserDir ?? Path.Combine(AppConfigStore.GetConfigDirectory(), "skills");
+        => Registry?.UserDir ?? AppConfigStore.GetSkillsDirectory();
 
     // ─────────────────────────── MCP 服务器 ───────────────────────────
 

@@ -43,8 +43,8 @@ public sealed class OneBot11Connection : IBotConnection
         {
             ContentRootPath = System.IO.Path.GetTempPath(),
         });
-        builder.WebHost.ConfigureKestrel(o =>
-            o.Listen(IPAddress.Parse(_config.Host), _config.Port));
+        var address = ResolveListenAddress(_config.Host);
+        builder.WebHost.ConfigureKestrel(o => o.Listen(address, _config.Port));
         builder.Logging.ClearProviders();
         var app = builder.Build();
 
@@ -63,6 +63,28 @@ public sealed class OneBot11Connection : IBotConnection
         _app = app;
         Log($"WS 服务端启动于 {Name}");
         return app.StartAsync(ct);
+    }
+
+    /// <summary>
+    /// 把配置里的 Host 解析成可监听地址：支持 IP 字面量、localhost、通配符 * / 0.0.0.0 / ::，
+    /// 以及普通主机名（解析失败时回退到回环，避免「localhost 抛 FormatException」这类启动失败）。
+    /// </summary>
+    private static IPAddress ResolveListenAddress(string host)
+    {
+        var text = (host ?? "").Trim();
+        if (text.Length == 0 || text is "*" or "+") return IPAddress.Any;
+        if (string.Equals(text, "localhost", StringComparison.OrdinalIgnoreCase)) return IPAddress.Loopback;
+        if (IPAddress.TryParse(text, out var literal)) return literal;
+        try
+        {
+            var resolved = Dns.GetHostAddresses(text);
+            if (resolved.Length > 0) return resolved[0];
+        }
+        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or ArgumentException)
+        {
+            // 解析失败：回退到回环（配置错误时至少不会因格式异常直接崩溃）
+        }
+        return IPAddress.Loopback;
     }
 
     public async Task StopAsync(CancellationToken ct = default)

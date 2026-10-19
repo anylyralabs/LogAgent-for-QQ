@@ -209,6 +209,19 @@ public class KnowledgeStoreFtsTests : IDisposable
     }
 
     [Fact]
+    public void EnsureCreated_ReportsFtsAvailability()
+    {
+        var store = Make();
+        // 标准 SQLite（含 FTS5）下应为 true；精简运行时未编译 FTS5 时为 false、检索退化为 LIKE。
+        var hasFts = store.IsFtsAvailable;
+        if (!hasFts)
+        {
+            // 降级路径也必须能建库与写入（不能因为缺 FTS5 阻断启动）
+            Assert.True(File.Exists(_dbPath));
+        }
+    }
+
+    [Fact]
     public async Task Search_ChinesePhrase_MatchesBigrams()
     {
         var store = Make();

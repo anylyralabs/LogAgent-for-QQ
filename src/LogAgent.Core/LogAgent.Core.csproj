@@ -5,6 +5,7 @@
     <ProjectReference Include="..\LogAgent.Routing\LogAgent.Routing.csproj" />
     <ProjectReference Include="..\LogAgent.Memory\LogAgent.Memory.csproj" />
     <ProjectReference Include="..\LogAgent.Knowledge\LogAgent.Knowledge.csproj" />
+    <ProjectReference Include="..\LogAgent.Mcp\LogAgent.Mcp.csproj" />
     <ProjectReference Include="..\LogAgent.Skills\LogAgent.Skills.csproj" />
   </ItemGroup>
 

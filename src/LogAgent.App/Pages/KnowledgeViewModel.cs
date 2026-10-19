@@ -84,7 +84,7 @@ public sealed class KnowledgeViewModel : ObservableObject
         try
         {
             var s = new KnowledgeStore(
-                Path.Combine(AppConfigStore.GetConfigDirectory(), "data", "knowledge.db"),
+                Path.Combine(AppConfigStore.GetDataDirectory(), "knowledge.db"),
                 AppConfigStore.Load().Knowledge,
                 AppHost.Router);
             s.EnsureCreated();

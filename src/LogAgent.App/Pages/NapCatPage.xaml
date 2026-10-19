@@ -22,7 +22,7 @@
                         <TextBlock Text="① 配置与启动 NapCat" Style="{StaticResource SectionTitle}" Margin="0,0,0,6"/>
                         <TextBlock FontSize="12.5" Foreground="{StaticResource TextTertiary}" TextWrapping="Wrap"
                                    Margin="0,0,0,14"
-                                   Text="从 NapCat 官方仓库下载 Shell 版压缩包解压，直接选择其中的启动脚本（如 napcat.bat）；首次启动后 WebUI Token 会自动读取。"/>
+                                   Text="从 NapCat 官方仓库下载 Shell 版压缩包解压，直接选择其中的启动脚本（Windows 如 napcat.bat，Linux 如 start.sh 并先 chmod +x）；首次启动后 WebUI Token 会自动读取。"/>
 
                         <TextBlock Text="NapCat 启动脚本" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
                         <Grid Margin="0,0,0,10">

@@ -1,11 +1,14 @@
 ﻿<Application x:Class="LogAgent.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:LogAgent.App.Infrastructure">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Fluent.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <infra:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+            <infra:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

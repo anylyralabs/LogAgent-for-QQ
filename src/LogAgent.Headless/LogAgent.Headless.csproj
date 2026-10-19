@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-LogAgent.Headless-b5a7b765-6a78-4f7f-ad6a-e0cb834440ce</UserSecretsId>
+    <!-- 发布用：无头服务同时支持 Windows 与 Linux（x64 / arm64） -->
+    <RuntimeIdentifiers>win-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,5 +20,9 @@
     <ProjectReference Include="..\LogAgent.Memory\LogAgent.Memory.csproj" />
     <ProjectReference Include="..\LogAgent.Knowledge\LogAgent.Knowledge.csproj" />
     <ProjectReference Include="..\LogAgent.Training\LogAgent.Training.csproj" />
+    <!-- 无头常驻需要连接层与 NapCat 托管（v0.7.0 只做 CLI 子命令时缺失） -->
+    <ProjectReference Include="..\LogAgent.Connections\LogAgent.Connections.csproj" />
+    <ProjectReference Include="..\LogAgent.NapCat\LogAgent.NapCat.csproj" />
+    <ProjectReference Include="..\LogAgent.Sandbox\LogAgent.Sandbox.csproj" />
   </ItemGroup>
 </Project>

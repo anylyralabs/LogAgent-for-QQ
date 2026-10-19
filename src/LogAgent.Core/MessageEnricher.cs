@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using LogAgent.Shared.Configuration;
 using LogAgent.Shared.Messaging;
+using LogAgent.Shared.Platform;
 
 namespace LogAgent.Core;
 
@@ -37,7 +38,7 @@ public sealed class MessageEnricher
         _mcLogsBase = (mcLogsBase ?? "https://api.mclo.gs").TrimEnd('/');
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         _downloadHttp = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        _filesDir = filesDir ?? Path.Combine(AppConfigStore.GetConfigDirectory(), "files");
+        _filesDir = filesDir ?? AppConfigStore.GetFilesDirectory();
         _allowPrivateWebFetch = allowPrivateWebFetch;
     }
 
@@ -278,7 +279,7 @@ public sealed class MessageEnricher
     private static string ToolsHint() =>
         "· search_file：搜索关键词定位区段（如 \"Exception\"、\"Caused by\"、\"SIGSEGV\"、\"Mod\"）\n" +
         "· read_file：按行区间精读任意部分（offset / limit）\n" +
-        "· run_shell：执行命令进一步处理（工作目录=files 目录，Windows cmd，如 findstr /n /i \"error\" 文件名）";
+        "· " + PlatformShell.Current.RunShellOneLiner;
 
     private static string HeadSnippet(string text) =>
         text.Length <= PreviewChars ? text : text[..PreviewChars] + "…";

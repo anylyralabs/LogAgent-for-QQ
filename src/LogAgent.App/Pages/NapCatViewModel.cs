@@ -136,7 +136,10 @@ public sealed class NapCatViewModel : ObservableObject
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Title = "选择 NapCat 启动脚本",
-                Filter = "启动脚本 (*.bat;*.cmd;*.exe)|*.bat;*.cmd;*.exe|所有文件 (*.*)|*.*",
+                // 脚本类型随平台变化：Windows 用 .bat/.cmd/.exe，Linux 用 .sh / 无扩展名可执行脚本
+                Filter = OperatingSystem.IsWindows()
+                    ? "启动脚本 (*.bat;*.cmd;*.exe)|*.bat;*.cmd;*.exe|所有文件 (*.*)|*.*"
+                    : "启动脚本 (*.sh;可执行文件)|*.sh|所有文件 (*.*)|*.*",
             };
             // 带 Owner 弹出，确保对话框显示在主窗口之上
             var owner = System.Windows.Application.Current?.MainWindow;

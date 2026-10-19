@@ -107,7 +107,7 @@
                     <TextBlock Text="启动与自动化" Style="{StaticResource SectionTitle}" Margin="0,0,0,4"/>
                     <TextBlock Text="让机器人随电脑自动上线，无需每次手动操作" FontSize="12"
                                Foreground="{StaticResource TextTertiary}" Margin="0,0,0,12"/>
-                    <CheckBox Content="开机自启动（登录 Windows 后自动后台启动，立即生效）"
+                    <CheckBox Content="{Binding AutoLaunchLabel}"
                               IsChecked="{Binding AutoLaunchWindows}" Margin="0,0,0,10"/>
                     <CheckBox Content="启动后自动连接 Bot（OneBot 服务与官方 Bot 按各自「启用」开关连接）"
                               IsChecked="{Binding AutoStartBots}" Margin="0,0,0,10"/>

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using LogAgent.Shared.Configuration;
+using LogAgent.Shared.Platform;
 
 namespace LogAgent.Sandbox;
 
@@ -11,6 +12,7 @@ public sealed record CommandAuditEntry(
 
 /// <summary>
 /// 沙箱 Shell 执行器：cwd 锁定工作区、白名单校验、超时杀进程树、输出截断、全量审计。
+/// 具体 shell 由 <see cref="PlatformShell"/> 决定（Windows cmd / POSIX sh）。
 /// 进程资源硬限制（Job Object / cgroups）为 IProcessIsolator 进阶项，M3 以超时+杀树实现。
 /// </summary>
 public sealed class SandboxRunner(SandboxConfig config)
@@ -33,12 +35,10 @@ public sealed class SandboxRunner(SandboxConfig config)
             return rejected;
         }
 
-        var isWindows = OperatingSystem.IsWindows();
+        var spec = PlatformShell.Current.BuildLaunch(command);
         var psi = new ProcessStartInfo
         {
-            FileName = isWindows ? "cmd.exe" : "/bin/bash",
-            // Windows：先切 UTF-8 代码页，保证中文输出不乱码（读取侧固定 UTF-8 解码）
-            Arguments = isWindows ? $"/c chcp 65001>nul & {command}" : $"-c {command}",
+            FileName = spec.FileName,
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -47,7 +47,15 @@ public sealed class SandboxRunner(SandboxConfig config)
             StandardErrorEncoding = Encoding.UTF8,
             CreateNoWindow = true,
         };
-        if (isWindows) psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        if (spec.ArgumentList is { Count: > 0 })
+        {
+            foreach (var arg in spec.ArgumentList) psi.ArgumentList.Add(arg);
+        }
+        else
+        {
+            psi.Arguments = spec.Arguments ?? "";
+        }
+        foreach (var (key, value) in spec.Environment) psi.Environment[key] = value;
 
         var started = Stopwatch.StartNew();
         try
@@ -71,6 +79,13 @@ public sealed class SandboxRunner(SandboxConfig config)
             var ok = new CommandResult(process.ExitCode, output, started.Elapsed, false);
             Audit(MakeEntry(taskId, command, ok));
             return ok;
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            // 命令不存在 / 无执行权限：给出可操作的提示，而不是原始系统错误
+            var failed = new CommandResult(-1, $"[无法执行] {spec.FileName}：{ex.Message}（检查该命令是否已安装、是否有执行权限）", started.Elapsed, false);
+            Audit(MakeEntry(taskId, command, failed));
+            return failed;
         }
         catch (Exception ex)
         {

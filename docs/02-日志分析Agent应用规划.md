@@ -211,7 +211,8 @@ L0 原文（全量保存，训练数据原料）
 
 - **独立工作区**：每个任务分配临时工作目录（`%AppData%/LogAgent/sandbox/{taskId}/`），任务结束随会话归档或按策略清理；
 - **文件操作限定沙箱内**：所有路径先规范化再校验——解析后的绝对路径必须在沙箱根目录之下，拦截 `..` 穿越、symlink 逃逸、盘符绝对路径；
-- **进程隔离**：shell 子进程挂 Windows **Job Object**（控制进程树、CPU/内存/时长配额，超时整树强杀）；进阶可升级 AppContainer 或容器化；
+- **进程隔离**：shell 子进程挂 Windows **Job Object**（控制进程树、CPU/内存/时长配额，超时整树强杀）；Linux 用进程组 + `Process.Kill(entireProcessTree: true)`（读 `/proc` 杀整棵树），进阶可升级 cgroup v2 或容器化；
+- **平台适配**：shell 入口由 `LogAgent.Shared/Platform` 的 `IShell` 决定——Windows `cmd.exe /c chcp 65001 & 命令`，Linux/macOS `/bin/sh -c 命令`（可用 `LOGAGENT_SHELL` 覆盖）；白名单/黑名单按平台生成默认值，`run_shell` 的提示词示例也随平台变化；
 - **网络只放行下载**：仅 http(s) GET、大小上限、超时控制、扩展名/MIME 白名单。
 
 #### 能力矩阵

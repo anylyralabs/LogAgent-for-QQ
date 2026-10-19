@@ -134,21 +134,45 @@ public class FileToolsTests : IDisposable
     // ---------- run_shell（沙箱） ----------
 
     [Fact]
-    public async Task RunShell_FindstrWorks()
+    public async Task RunShell_SearchWorks()
     {
         File.WriteAllText(Path.Combine(_dir, "t.log"), "line1\nneedle here\nline3");
         var runner = new SandboxRunner(new SandboxConfig());
-        var output = await Run(Make(runner), FileTools.RunShellTool, """{"command":"findstr /n \"needle\" t.log"}""");
+        // 按平台选择白名单内可用的搜索命令（Windows: findstr / Linux: grep）
+        var command = OperatingSystem.IsWindows()
+            ? "findstr /n \"needle\" t.log"
+            : "grep -n \"needle\" t.log";
+        var json = System.Text.Json.JsonSerializer.Serialize(new { command });
+        var output = await Run(Make(runner), FileTools.RunShellTool, json);
 
         Assert.Contains("needle here", output);
         Assert.Contains("exit 0", output);
+    }
+
+    [UnixOnlyFact]
+    public async Task RunShell_TimeoutKillsProcessTree_OnUnix()
+    {
+        // 超时与杀进程树依赖 /proc，必须在真实 Unix 上验证（Windows 走 Job Object 语义）
+        // 超时下限被钳到 5 秒（SandboxRunner 里 Math.Max(5, ...)），所以用 5 秒 + sleep 30
+        var config = new SandboxConfig
+        {
+            CommandTimeoutSeconds = 5,
+            WhitelistCommands = ["sleep"],
+            BlacklistPatterns = [],
+        };
+        var runner = new SandboxRunner(config);
+        var output = await Run(Make(runner), FileTools.RunShellTool, """{"command":"sleep 30"}""");
+
+        Assert.Contains("超时", output);
     }
 
     [Fact]
     public async Task RunShell_BlacklistedCommand_Refused()
     {
         var runner = new SandboxRunner(new SandboxConfig());
-        var output = await Run(Make(runner), FileTools.RunShellTool, """{"command":"shutdown /s"}""");
+        var command = OperatingSystem.IsWindows() ? "shutdown /s" : "sudo rm -rf /";
+        var json = System.Text.Json.JsonSerializer.Serialize(new { command });
+        var output = await Run(Make(runner), FileTools.RunShellTool, json);
         Assert.Contains("拒绝", output);
     }
 

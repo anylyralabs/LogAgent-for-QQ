@@ -1,0 +1,32 @@
+[Unit]
+Description=LogAgent QQ 日志分析助手（无头服务）
+Documentation=https://github.com/anylyralabs/LogAgent-for-QQ
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 专用账号运行时把下面的 User 与 HOME/日志目录改成对应值
+User=logagent
+Group=logagent
+WorkingDirectory=/opt/logagent
+Environment=HOME=/var/lib/logagent
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+# 可选：把配置/数据放到独立目录（默认 $HOME/.config/LogAgent）
+# Environment=LOGAGENT_CONFIG_DIR=/var/lib/logagent/config
+
+ExecStart=/opt/logagent/LogAgent.Headless serve
+Restart=on-failure
+RestartSec=5
+# systemd 停止时发 SIGTERM；应用据此切段会话后退出
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# 基础加固（按需放宽）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/logagent
+
+[Install]
+WantedBy=multi-user.target

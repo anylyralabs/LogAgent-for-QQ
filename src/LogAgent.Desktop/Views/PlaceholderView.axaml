@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+             x:Class="LogAgent.Desktop.Views.PlaceholderView"
+             x:DataType="vm:PlaceholderViewModel">
+    <Grid>
+        <Border Classes="card" MaxWidth="520" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <StackPanel Spacing="10">
+                <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextSecondary}"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

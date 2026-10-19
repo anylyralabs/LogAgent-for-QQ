@@ -2,18 +2,60 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, linux]
   pull_request:
+    branches: [main, linux]
 
 jobs:
-  build-test:
+  # Windows：构建整个解决方案（含 WPF 桌面壳）+ 跨平台桌面壳，并跑全部用例
+  build-test-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Build
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-windows-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-windows-
+      - name: Build (WPF + libraries)
         run: dotnet build LogAgent.slnx -v q
+      - name: Build (cross-platform desktop shell)
+        run: dotnet build src/LogAgent.Desktop/LogAgent.Desktop.csproj -v q
       - name: Test
         run: dotnet test tests/LogAgent.Tests/LogAgent.Tests.csproj --nologo
+
+  # Linux：构建跨平台项目（类库 + Headless + Avalonia 桌面壳 + 测试），跑无头端到端自检
+  build-test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-linux-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-linux-
+      - name: Install desktop dependencies (Avalonia headless build)
+        run: |
+          # Avalonia 编译不需要 X11，但 XAML 编译器在部分环境需要基础字体库
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libfontconfig1
+      - name: Build (cross-platform projects)
+        run: |
+          # LogAgent.App 是 WPF(net10.0-windows)，不在 Linux 构建目标内
+          dotnet build src/LogAgent.Headless/LogAgent.Headless.csproj -v q
+          dotnet build src/LogAgent.Desktop/LogAgent.Desktop.csproj -v q
+          dotnet build tests/LogAgent.Tests/LogAgent.Tests.csproj -v q
+      - name: Test
+        run: dotnet test tests/LogAgent.Tests/LogAgent.Tests.csproj --nologo
+      - name: Headless selftest
+        run: dotnet run --project src/LogAgent.Headless --no-build -- selftest
+      - name: Doctor (informational)
+        run: dotnet run --project src/LogAgent.Headless --no-build -- doctor || true

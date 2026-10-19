@@ -1,0 +1,286 @@
+name: Build Artifacts
+
+# 构建可下载产物（Artifacts），不自动发布 GitHub Release。
+# 打 tag（v*）时同样只上传 Artifacts；如需正式发布，手动把产物挂到 Release 上。
+on:
+  push:
+    branches: [main, linux]
+    tags: ['v*']
+  pull_request:
+    branches: [main, linux]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  # 产物统一放这里，便于统一上传
+  ARTIFACTS: ${{ github.workspace }}/artifacts
+
+jobs:
+  # ─────────────────────────── Linux 无头服务 ───────────────────────────
+  linux-headless:
+    name: Linux headless (${{ matrix.rid }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            name: linux-x64
+          - rid: linux-arm64
+            name: linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-headless-${{ matrix.rid }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-headless-${{ matrix.rid }}-
+
+      - name: Publish (self-contained, single file)
+        run: |
+          dotnet publish src/LogAgent.Headless/LogAgent.Headless.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:DebugType=none \
+            -o "$ARTIFACTS/${{ matrix.name }}"
+
+      - name: Sanity check binary
+        run: |
+          set -euo pipefail
+          test -x "$ARTIFACTS/${{ matrix.name }}/LogAgent.Headless"
+          # 自检自身可执行（--help 不联网、不写配置）
+          "$ARTIFACTS/${{ matrix.name }}/LogAgent.Headless" --help > /dev/null
+          echo "二进制可执行 OK"
+
+      - name: Package (tar.gz + sha256)
+        run: |
+          set -euo pipefail
+          cd "$ARTIFACTS"
+          tar -czf "${{ matrix.name }}.tar.gz" "${{ matrix.name }}"
+          sha256sum "${{ matrix.name }}.tar.gz" > "${{ matrix.name }}.tar.gz.sha256"
+          rm -rf "${{ matrix.name }}"
+          ls -lh
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: logagent-headless-${{ matrix.name }}
+          path: |
+            artifacts/${{ matrix.name }}.tar.gz
+            artifacts/${{ matrix.name }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  # ─────────────────────────── Linux 桌面壳（Avalonia） ───────────────────────────
+  linux-desktop:
+    name: Linux desktop (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-desktop-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-desktop-
+
+      - name: Publish Avalonia desktop
+        run: |
+          dotnet publish src/LogAgent.Desktop/LogAgent.Desktop.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=none \
+            -o "$ARTIFACTS/desktop-linux-x64"
+
+      - name: Sanity check files
+        run: |
+          set -euo pipefail
+          ls -lh "$ARTIFACTS/desktop-linux-x64"
+          test -f "$ARTIFACTS/desktop-linux-x64/LogAgent.Desktop"
+
+      - name: Package (tar.gz + sha256)
+        run: |
+          set -euo pipefail
+          cd "$ARTIFACTS"
+          tar -czf desktop-linux-x64.tar.gz desktop-linux-x64
+          sha256sum desktop-linux-x64.tar.gz > desktop-linux-x64.tar.gz.sha256
+          rm -rf desktop-linux-x64
+          ls -lh
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: logagent-desktop-linux-x64
+          path: |
+            artifacts/desktop-linux-x64.tar.gz
+            artifacts/desktop-linux-x64.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  # ─────────────────────────── Docker 镜像（仅构建，不推送） ───────────────────────────
+  docker-image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          load: true
+          tags: logagent:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test container
+        run: |
+          set -euo pipefail
+          # 注意：镜像 ENTRYPOINT 是 "serve"，直接追加 --help 会变成 "serve --help" 并常驻。
+          # 这里覆盖 entrypoint，只验证二进制可执行 + 配置目录可读。
+          docker run --rm --entrypoint /app/LogAgent.Headless logagent:ci --help
+          docker run --rm --entrypoint /app/LogAgent.Headless logagent:ci config path
+          echo "容器可启动 OK"
+
+      - name: Export image tar
+        run: |
+          set -euo pipefail
+          docker save logagent:ci | gzip -1 > logagent-docker-image.tar.gz
+          sha256sum logagent-docker-image.tar.gz > logagent-docker-image.tar.gz.sha256
+          ls -lh logagent-docker-image.tar.gz
+
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: logagent-docker-image
+          path: |
+            logagent-docker-image.tar.gz
+            logagent-docker-image.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  # ─────────────────────────── Windows 桌面版（WPF） ───────────────────────────
+  windows-desktop:
+    name: Windows desktop (win-x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-winapp-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-winapp-
+
+      - name: Publish (WPF single file)
+        shell: pwsh
+        run: |
+          dotnet publish src/LogAgent.App/LogAgent.App.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=none `
+            -o "$env:ARTIFACTS\win-x64"
+          if (-not (Test-Path "$env:ARTIFACTS\win-x64\LogAgent.App.exe")) {
+            throw "未生成 LogAgent.App.exe"
+          }
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "$env:ARTIFACTS\win-x64\*" -DestinationPath "$env:ARTIFACTS\win-x64.zip"
+          (Get-FileHash "$env:ARTIFACTS\win-x64.zip" -Algorithm SHA256).Hash.ToLower() + "  win-x64.zip" |
+            Out-File -Encoding ascii "$env:ARTIFACTS\win-x64.zip.sha256"
+          Get-ChildItem $env:ARTIFACTS | Format-Table Name, Length
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: logagent-windows-x64
+          path: |
+            artifacts/win-x64.zip
+            artifacts/win-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  # ─────────────────────────── 汇总校验 ───────────────────────────
+  verify:
+    name: Verify artifacts
+    needs: [linux-headless, linux-desktop, docker-image, windows-desktop]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all
+
+      - name: Assert expected artifacts present
+        run: |
+          set -euo pipefail
+          ls -R all
+          expected="
+          logagent-headless-linux-x64/linux-x64.tar.gz
+          logagent-headless-linux-arm64/linux-arm64.tar.gz
+          logagent-desktop-linux-x64/desktop-linux-x64.tar.gz
+          logagent-docker-image/logagent-docker-image.tar.gz
+          logagent-windows-x64/win-x64.zip
+          "
+          fail=0
+          for f in $expected; do
+            if [ ! -f "all/$f" ]; then
+              echo "缺失: $f"; fail=1
+            else
+              echo "OK: $f ($(du -h "all/$f" | cut -f1))"
+            fi
+          done
+          exit $fail
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## 构建产物"
+            echo ""
+            echo "| 产物 | 大小 |"
+            echo "|---|---|"
+            find all -type f \( -name '*.tar.gz' -o -name '*.zip' \) -printf '%p\n' |
+              while read -r f; do
+                printf '| `%s` | %s |\n' "${f#all/}" "$(du -h "$f" | cut -f1)"
+              done
+            echo ""
+            echo "> 产物可在本页底部 Artifacts 区域下载；保留期见各 job。"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+        x:Class="LogAgent.Desktop.Views.MainWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="LogAgent — 日志分析助手"
+        Width="1180" Height="720"
+        MinWidth="960" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppBackground}">
+    <Grid ColumnDefinitions="220,*">
+        <!-- 侧边栏 -->
+        <Border Grid.Column="0" Background="{DynamicResource LayerFill}"
+                BorderBrush="{DynamicResource DividerStroke}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="20,24,20,16" Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Image Source="avares://LogAgent.Desktop/Assets/logo-128.png"
+                               Width="28" Height="28"/>
+                        <TextBlock Text="LogAgent" FontSize="20" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="QQ 日志分析助手" FontSize="12" Margin="38,0,0,0"
+                               Foreground="{DynamicResource TextTertiary}"/>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom" Margin="16,8,16,16" Spacing="4">
+                    <TextBlock Text="{Binding Status}" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextTertiary}"/>
+                    <TextBlock Text="{Binding PlatformLine}" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextTertiary}"/>
+                </StackPanel>
+
+                <ListBox x:Name="Nav" Margin="0,4,0,0" Background="Transparent" BorderThickness="0"
+                         SelectionChanged="Nav_SelectionChanged" SelectedIndex="0">
+                    <ListBoxItem Content="仪表盘"/>
+                    <ListBoxItem Content="对话"/>
+                    <ListBoxItem Content="模型路由"/>
+                    <ListBoxItem Content="运行日志"/>
+                    <ListBoxItem Content="设置"/>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- 内容区 -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
+            <Grid Grid.Row="0" Margin="32,24,32,12" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding PageTitle}" FontSize="22" FontWeight="SemiBold"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Content="启动服务" Command="{Binding StartOneBotCommand}"/>
+                    <Button Content="停止服务" Command="{Binding StopOneBotCommand}"/>
+                </StackPanel>
+            </Grid>
+
+            <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" Margin="32,0,32,12"/>
+
+            <Border Grid.Row="2" BorderBrush="{DynamicResource DividerStroke}" BorderThickness="0,1,0,0"
+                    Padding="32,8">
+                <TextBlock Text="{Binding ConnectionState}" FontSize="12"
+                           Foreground="{DynamicResource TextSecondary}"/>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

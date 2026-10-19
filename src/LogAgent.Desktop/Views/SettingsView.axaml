@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+             x:Class="LogAgent.Desktop.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="14" MaxWidth="820" HorizontalAlignment="Left">
+            <StackPanel Spacing="4">
+                <TextBlock Text="设置" Classes="title"/>
+                <TextBlock Classes="subtitle" Text="触发规则 / 会话参数 / 沙箱 / 启动选项（写入 config.json）"/>
+            </StackPanel>
+
+            <!-- 触发与会话 -->
+            <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="触发与会话" Classes="section"/>
+                    <CheckBox Content="群聊需要 @ 机器人才响应（私聊总是响应）"
+                              IsChecked="{Binding NeedAtInGroup, Mode=TwoWay}"/>
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="额外触发关键词（逗号分隔，命中即响应，无需 @）" Classes="label"/>
+                        <TextBox Text="{Binding TriggerKeywords, Mode=TwoWay}"
+                                 Watermark="例如：小炎, 分析日志"/>
+                    </StackPanel>
+                    <Grid ColumnDefinitions="180,12,140" RowDefinitions="Auto,8,Auto,8,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="会话空闲切段（分钟）" Classes="label"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="0" Grid.Column="2"
+                                 Text="{Binding IdleTimeoutMinutes, Mode=TwoWay}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="会话 token 上限" Classes="label"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="2" Grid.Column="2"
+                                 Text="{Binding SessionMaxTokens, Mode=TwoWay}"/>
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="会话消息数上限" Classes="label"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Row="4" Grid.Column="2"
+                                 Text="{Binding SessionMaxMessages, Mode=TwoWay}"/>
+                    </Grid>
+                    <CheckBox Content="切段时生成 L1 摘要（走 Summary 分流，用便宜模型）"
+                              IsChecked="{Binding SummaryOnCut, Mode=TwoWay}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 沙箱 -->
+            <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="命令沙箱" Classes="section"/>
+                    <CheckBox Content="启用命令沙箱（run_shell 工具）" IsChecked="{Binding SandboxEnabled, Mode=TwoWay}"/>
+                    <Grid ColumnDefinitions="180,12,140">
+                        <TextBlock Grid.Column="0" Text="命令超时（秒）" Classes="label" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="2" Text="{Binding SandboxTimeoutSeconds, Mode=TwoWay}"/>
+                    </Grid>
+                    <TextBlock Text="{Binding SandboxPlatformHint}" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextTertiary}"/>
+                    <Button Content="重置沙箱命令规则为平台默认（先备份配置）"
+                            Command="{Binding RepairSandboxCommand}" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 启动 -->
+            <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="启动与自动化" Classes="section"/>
+                    <CheckBox Content="{Binding AutoStartLabel}" IsChecked="{Binding AutoStart, Mode=TwoWay}"/>
+                    <CheckBox Content="启动后自动连接 Bot（OneBot 服务与官方 Bot 按各自「启用」开关连接）"
+                              IsChecked="{Binding AutoStartBots, Mode=TwoWay}"/>
+                    <CheckBox Content="启动时最小化（开机自启场景）" IsChecked="{Binding StartMinimized, Mode=TwoWay}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 数据 -->
+            <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="数据与维护" Classes="section"/>
+                    <TextBlock Text="{Binding DataDirectory}" FontFamily="monospace" FontSize="11"
+                               TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}"/>
+                    <Button Content="打开数据目录" Command="{Binding OpenDataDirCommand}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="备份整个目录即可（config.json / data / files / skills）。密钥只存在 config.json，注意保管。"
+                               FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextTertiary}"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button Content="保存设置" Command="{Binding SaveCommand}" Padding="18,7"/>
+                <TextBlock Text="{Binding SaveHint}" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource SuccessText}"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

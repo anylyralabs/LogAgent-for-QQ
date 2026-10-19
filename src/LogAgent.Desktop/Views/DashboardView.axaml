@@ -1,0 +1,83 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+             x:Class="LogAgent.Desktop.Views.DashboardView"
+             x:DataType="vm:DashboardViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="14">
+            <StackPanel Spacing="4">
+                <TextBlock Text="仪表盘" Classes="title"/>
+                <TextBlock Classes="subtitle"
+                           Text="连接状态、模型调用计量与知识库统计（数据来自本机数据库，跨重启累计）"/>
+            </StackPanel>
+
+            <!-- 概览卡片 -->
+            <Grid ColumnDefinitions="*,12,*,12,*">
+                <Border Grid.Column="0" Classes="card">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="模型调用" Classes="label"/>
+                        <TextBlock Text="{Binding ModelCalls}" FontSize="28" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding TodayUsage}" FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextTertiary}"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Classes="card">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="会话" Classes="label"/>
+                        <TextBlock Text="{Binding SessionCount}" FontSize="28" FontWeight="SemiBold"/>
+                        <TextBlock Text="会话库累计" FontSize="11" Foreground="{DynamicResource TextTertiary}"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="4" Classes="card">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="知识库" Classes="label"/>
+                        <TextBlock Text="{Binding KnowledgeCount}" FontSize="16" FontWeight="SemiBold"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding FtsState}" FontSize="11" Foreground="{DynamicResource TextTertiary}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 连接与配置 -->
+            <Border Classes="card">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="运行环境" Classes="section"/>
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="连接状态" Classes="label" Width="90"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ConnectionState}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="模型通道" Classes="label"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ProviderSummary}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="平台" Classes="label"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PlatformLine}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="数据目录" Classes="label"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding DataDirectory}"
+                                   TextWrapping="Wrap" FontFamily="monospace" FontSize="12"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 模型计量表 -->
+            <Border Classes="card" Padding="0">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="16,14,16,8" Spacing="10">
+                        <TextBlock Text="本次启动的模型调用" Classes="section"/>
+                        <Button Content="刷新" Command="{Binding RefreshCommand}" Padding="10,3"/>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding RouterRows}" AutoGenerateColumns="False"
+                              IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              BorderThickness="0" MinHeight="120">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Provider" Binding="{Binding Provider}" Width="*"/>
+                            <DataGridTextColumn Header="模型" Binding="{Binding Model}" Width="180"/>
+                            <DataGridTextColumn Header="成功" Binding="{Binding Ok}" Width="70"/>
+                            <DataGridTextColumn Header="失败" Binding="{Binding Fail}" Width="70"/>
+                            <DataGridTextColumn Header="成功率" Binding="{Binding SuccessRate}" Width="80"/>
+                            <DataGridTextColumn Header="Tokens" Binding="{Binding Tokens}" Width="90"/>
+                            <DataGridTextColumn Header="平均延迟" Binding="{Binding Latency}" Width="100"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

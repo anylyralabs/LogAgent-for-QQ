@@ -35,13 +35,14 @@ public sealed class SettingsViewModel : ObservableObject
         set
         {
             if (!Set(ref _autoLaunch, value)) return;
-            // 开机自启动立即生效（注册表 HKCU Run）
+            // 开机自启动立即生效（Windows 注册表 HKCU Run / Linux ~/.config/autostart）
             AutoStartManager.SetEnabled(value);
-            SaveHint = value
-                ? "开机自启动已开启（登录后自动后台启动并连接 Bot）"
-                : "开机自启动已关闭";
+            SaveHint = value ? "开机自启动已开启" : "开机自启动已关闭";
         }
     }
+
+    /// <summary>开机自启动复选框文案（按平台给出准确描述）。</summary>
+    public string AutoLaunchLabel => AutoStartManager.Describe();
 
     public bool AutoStartBots { get => _autoStartBots; set => Set(ref _autoStartBots, value); }
     public bool StartMinimized { get => _startMinimized; set => Set(ref _startMinimized, value); }
@@ -134,7 +135,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     private void RefreshDataInfo()
     {
-        var dataDir = Path.Combine(AppConfigStore.GetConfigDirectory(), "data");
+        var dataDir = AppConfigStore.GetDataDirectory();
         try
         {
             long total = 0;
@@ -150,7 +151,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     private void OpenDataDir()
     {
-        var dataDir = Path.Combine(AppConfigStore.GetConfigDirectory(), "data");
+        var dataDir = AppConfigStore.GetDataDirectory();
         Directory.CreateDirectory(dataDir);
         try
         {

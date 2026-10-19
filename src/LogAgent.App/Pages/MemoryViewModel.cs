@@ -33,7 +33,7 @@ public sealed class MemoryViewModel : ObservableObject
         Turns.Clear();
         try
         {
-            var db = new Database(Path.Combine(AppConfigStore.GetConfigDirectory(), "data", "logagent.db"));
+            var db = new Database(Path.Combine(AppConfigStore.GetDataDirectory(), "logagent.db"));
             var store = new SessionStore(db);
             foreach (var turn in store.ListRecentTurns(100))
                 Turns.Add(new TurnItem(turn));

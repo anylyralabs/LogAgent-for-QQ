@@ -28,7 +28,7 @@ public partial class DashboardPage : Page
         LoadStats();
         LoadRouterMeter();
         ConfigPathText.Text = $"配置：{AppConfigStore.GetConfigPath()}";
-        DbPathText.Text = $"数据目录：{Path.Combine(AppConfigStore.GetConfigDirectory(), "data")}";
+        DbPathText.Text = $"数据目录：{AppConfigStore.GetDataDirectory()}";
     }
 
     // ---------- 连接状态总览 ----------
@@ -98,7 +98,7 @@ public partial class DashboardPage : Page
     {
         try
         {
-            var db = new Database(Path.Combine(AppConfigStore.GetConfigDirectory(), "data", "logagent.db"));
+            var db = new Database(Path.Combine(AppConfigStore.GetDataDirectory(), "logagent.db"));
             db.EnsureCreated();
             var store = new SessionStore(db);
             var sessions = store.ListSessions(100000);
@@ -122,7 +122,7 @@ public partial class DashboardPage : Page
         try
         {
             var kb = new Knowledge.KnowledgeStore(
-                Path.Combine(AppConfigStore.GetConfigDirectory(), "data", "knowledge.db"),
+                Path.Combine(AppConfigStore.GetDataDirectory(), "knowledge.db"),
                 AppConfigStore.Load().Knowledge,
                 AppHost.Router);
             kb.EnsureCreated();

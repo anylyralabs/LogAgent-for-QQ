@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\LogAgent.Shared\LogAgent.Shared.csproj" />
     <ProjectReference Include="..\LogAgent.Core\LogAgent.Core.csproj" />
+    <ProjectReference Include="..\LogAgent.Mcp\LogAgent.Mcp.csproj" />
     <ProjectReference Include="..\LogAgent.Routing\LogAgent.Routing.csproj" />
     <ProjectReference Include="..\LogAgent.Memory\LogAgent.Memory.csproj" />
     <ProjectReference Include="..\LogAgent.Connections\LogAgent.Connections.csproj" />

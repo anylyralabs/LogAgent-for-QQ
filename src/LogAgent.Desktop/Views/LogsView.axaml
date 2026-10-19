@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+             x:Class="LogAgent.Desktop.Views.LogsView"
+             x:DataType="vm:LogsViewModel">
+    <Grid RowDefinitions="Auto,10,*,12,Auto">
+        <StackPanel Grid.Row="0" Spacing="4">
+            <TextBlock Text="运行日志" Classes="title"/>
+            <TextBlock Classes="subtitle"
+                       Text="连接 / 会话 / 知识库 / 沙箱 / 工具调用 / MCP 的实时日志（最近 1000 条）"/>
+        </StackPanel>
+
+        <Grid Grid.Row="2" RowDefinitions="Auto,8,*">
+            <Grid Grid.Row="0" ColumnDefinitions="*,10,Auto">
+                <TextBox Grid.Column="0" Watermark="筛选（子串匹配，不区分大小写）"
+                         Text="{Binding Filter, Mode=TwoWay}"/>
+                <Button Grid.Column="2" Content="清屏" Command="{Binding ClearCommand}" Padding="12,6"/>
+            </Grid>
+
+            <Border Grid.Row="2" Classes="card" Padding="0">
+                <ScrollViewer>
+                    <ListBox ItemsSource="{Binding Lines}" Background="Transparent" BorderThickness="0"
+                             Padding="10,6">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontFamily="monospace" FontSize="12"
+                                           TextWrapping="Wrap" Margin="0,1"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

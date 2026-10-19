@@ -7,7 +7,7 @@
 [![CI](https://github.com/anylyralabs/LogAgent-for-QQ/actions/workflows/ci.yml/badge.svg)](https://github.com/anylyralabs/LogAgent-for-QQ/actions/workflows/ci.yml)
 [![version](https://img.shields.io/badge/version-0.7.0-blue)](../../releases)
 [![license](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
-![platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![tests](https://img.shields.io/badge/tests-203%20passing-brightgreen)
 
 ![仪表盘：连接状态与模型用量统计](docs/images/dashboard-usage.png)
@@ -43,6 +43,8 @@
 
 ## 🚀 快速开始
 
+**Windows 桌面版**
+
 ```bash
 git clone https://github.com/anylyralabs/LogAgent-for-QQ.git
 cd LogAgent-for-QQ
@@ -53,13 +55,29 @@ dotnet publish src/LogAgent.App/LogAgent.App.csproj -c Release -r win-x64 --self
 
 首次启动进入配置向导：填模型通道 → 选 QQ 接入方式 → 完成。
 
+**Linux 无头版**（服务器常驻，详见 [Linux 部署](docs/05-Linux部署.md)）
+
+```bash
+dotnet publish src/LogAgent.Headless -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish/linux-x64
+./publish/linux-x64/LogAgent.Headless doctor     # 环境自检
+./publish/linux-x64/LogAgent.Headless serve      # 常驻（SIGTERM 优雅退出）
+```
+
+Linux 默认命令集是 POSIX shell（grep/sed/awk/find…），配置目录 `~/.config/LogAgent/`。
+
+**跨平台桌面版**（Avalonia，Windows / Linux 通用）：
+
+```bash
+dotnet run --project src/LogAgent.Desktop
+```
+
 ## ⚙️ 安装与配置
 
 ### 环境要求
 
 | 依赖 | 要求 |
 |------|------|
-| 操作系统 | Windows 10 / 11 |
+| 操作系统 | Windows 10 / 11（桌面版）；Linux x64/arm64（无头版） |
 | .NET SDK | 10.0（仅构建需要；发布产物已内嵌运行时） |
 | 模型端点 | 任意 OpenAI 兼容 API（本地代理 / 聚合平台 / 自建网关） |
 | QQ 接入 | NapCat（OneBot 11）或 QQ 官方 Bot，二选一 |
@@ -145,19 +163,21 @@ A：`%AppData%\LogAgent\`——`config.json` 配置、`data\` SQLite（会话/�
 ## 🧭 项目结构
 
 ```
-LogAgent.App          WPF 主程序（托盘 / 向导 / 功能页）
-LogAgent.Core         AgentRuntime / GroupContextAgent / LogAnalysisAgent
+LogAgent.App          WPF 主程序（Windows 桌面壳：托盘 / 向导 / 全部功能页）
+LogAgent.Desktop      跨平台桌面壳（Avalonia：仪表盘 / 对话 / 模型路由 / 日志 / 设置）
+LogAgent.Core         运行时组合根 AgentHost + AgentRuntime / GroupContextAgent / LogAnalysisAgent
+LogAgent.Headless     无头宿主（Linux/服务器：serve / doctor / selftest / 知识库导入 / 训练导出）
 LogAgent.Connections  OneBot11Connection / OfficialBotConnection / QrConnect
 LogAgent.Routing      多模型路由（优先链 + 熔断 + 计量事件）
 LogAgent.Knowledge    知识库（RAG + 审核流）
 LogAgent.Memory       会话存储 / 学习提炼 / 模型用量持久化
 LogAgent.Skills       技能注册 + 内置工具宿主（read_file / search_file / run_shell）
 LogAgent.Sandbox      命令沙箱（白名单 + 审计 + 路径守卫）
-LogAgent.Shared       消息模型 / 配置 / 提示词集中管理
+LogAgent.Shared       消息模型 / 配置 / 提示词 / Platform（shell 与路径规则抽象）
 tools/  docs/         运维测试脚本 / 设计文档
 ```
 
-设计细节见 [docs/](docs/)：[构建工作流笔记](docs/01-Agent应用构建工作流-学习笔记.md) · [日志分析 Agent 规划](docs/02-日志分析Agent应用规划.md) · [快速上手](docs/03-快速上手.md) · [分发与首启体验](docs/04-分发与首启体验.md)。
+设计细节见 [docs/](docs/)：[构建工作流笔记](docs/01-Agent应用构建工作流-学习笔记.md) · [日志分析 Agent 规划](docs/02-日志分析Agent应用规划.md) · [快速上手](docs/03-快速上手.md) · [分发与首启体验](docs/04-分发与首启体验.md) · [Linux 部署](docs/05-Linux部署.md)。
 
 ## 🤝 贡献
 

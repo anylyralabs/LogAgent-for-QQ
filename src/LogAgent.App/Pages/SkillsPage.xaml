@@ -225,7 +225,7 @@
                     <TextBlock FontSize="12.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" LineHeight="21">
                         · <Run FontWeight="SemiBold">技能</Run>：skill.json（HTTP 工具）/ SKILL.md（指令知识包，模型按需读取）<LineBreak/>
                         · <Run FontWeight="SemiBold">MCP</Run>：标准协议（JSON-RPC over stdio / HTTP），兼容官方与社区服务器<LineBreak/>
-                        · 用户技能在 <Run FontWeight="SemiBold">%AppData%\LogAgent\skills\</Run>；MCP 配置存 config.json<LineBreak/>
+                        · 用户技能在 <Run FontWeight="SemiBold" Text="{Binding UserSkillsDir}"/>；MCP 配置存 config.json<LineBreak/>
                         · 启用后工具对模型可见，由模型在对话中按需调用<LineBreak/>
                         · npx 首次启动会下载包，可能稍慢；测试请用「测试连接」按钮
                     </TextBlock>

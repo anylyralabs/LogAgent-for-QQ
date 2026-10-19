@@ -1,0 +1,33 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LogAgent.Desktop.ViewModels"
+             xmlns:views="clr-namespace:LogAgent.Desktop.Views"
+             x:Class="LogAgent.Desktop.App"
+             RequestedThemeVariant="Light">
+    <Application.DataTemplates>
+        <DataTemplate DataType="vm:DashboardViewModel">
+            <views:DashboardView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:ChatViewModel">
+            <views:ChatView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:ProvidersViewModel">
+            <views:ProvidersView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:LogsViewModel">
+            <views:LogsView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:SettingsViewModel">
+            <views:SettingsView/>
+        </DataTemplate>
+        <DataTemplate DataType="vm:PlaceholderViewModel">
+            <views:PlaceholderView/>
+        </DataTemplate>
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+        <StyleInclude Source="avares://LogAgent.Desktop/Themes/Fluent.axaml" />
+    </Application.Styles>
+</Application>
