@@ -1,5 +1,4 @@
-using System.Text.Json;
-using LogAgent.Shared.Configuration;
+using System.IO;
 using LogAgent.Shared.Platform;
 
 namespace LogAgent.App.Services;

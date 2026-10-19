@@ -62,10 +62,22 @@ jobs:
       - name: Sanity check binary
         run: |
           set -euo pipefail
-          test -x "$ARTIFACTS/${{ matrix.name }}/LogAgent.Headless"
-          # 自检自身可执行（--help 不联网、不写配置）
-          "$ARTIFACTS/${{ matrix.name }}/LogAgent.Headless" --help > /dev/null
-          echo "二进制可执行 OK"
+          BIN="$ARTIFACTS/${{ matrix.name }}/LogAgent.Headless"
+          test -x "$BIN"
+          # 交叉编译产物不能在 x64 runner 上执行（arm64 会报 Exec format error），
+          # 因此按目标架构决定「真跑一次」还是「只校验 ELF 头」。
+          case "${{ matrix.rid }}" in
+            linux-x64)
+              "$BIN" --help > /dev/null
+              echo "x64 二进制实跑 OK"
+              ;;
+            linux-arm64)
+              file "$BIN"
+              # 确认是 aarch64 ELF 且为可执行文件
+              file "$BIN" | grep -q "ELF 64-bit LSB.*ARM aarch64"
+              echo "arm64 二进制 ELF 头校验 OK（不在 x64 runner 上执行）"
+              ;;
+          esac
 
       - name: Package (tar.gz + sha256)
         run: |

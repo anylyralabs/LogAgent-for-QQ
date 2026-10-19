@@ -168,7 +168,9 @@ public sealed class StdioTransport(McpServerEntry config) : IMcpTransport
     /// <summary>Unix 下判断文件是否带执行位（Windows / 非 Unix 文件系统视为可执行）。</summary>
     internal static bool HasExecutePermission(string path)
     {
-        if (!PlatformInfo.IsUnix) return true;
+        // 用 OperatingSystem.IsWindows() 而非 PlatformInfo.IsUnix：分析器能识别前者并做平台流分析，
+        // File.GetUnixFileMode 在 Windows 上调用会抛 PlatformNotSupportedException（CA1416）。
+        if (OperatingSystem.IsWindows()) return true;
         try
         {
             var mode = File.GetUnixFileMode(path);

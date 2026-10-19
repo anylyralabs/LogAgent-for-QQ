@@ -61,7 +61,13 @@ public class FileToolsTests : IDisposable
     [Fact]
     public async Task ReadFile_PathOutsideFilesDir_Refused()
     {
-        var output = await Run(Make(), FileTools.ReadFileTool, """{"path":"C:/Windows/win.ini"}""");
+        // 用「当前平台的绝对路径」构造越界用例：
+        // 在 Linux 上 "C:/Windows/win.ini" 会被当成相对路径，不会触发越界分支。
+        var outside = OperatingSystem.IsWindows()
+            ? @"C:\Windows\win.ini"
+            : "/etc/hostname";
+        var json = System.Text.Json.JsonSerializer.Serialize(new { path = outside });
+        var output = await Run(Make(), FileTools.ReadFileTool, json);
         Assert.Contains("只能访问 files 目录", output);
     }
 

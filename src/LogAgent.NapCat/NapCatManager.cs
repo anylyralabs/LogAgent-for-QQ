@@ -152,7 +152,8 @@ public sealed class NapCatManager
 
     private static bool HasExecutePermission(string path)
     {
-        if (IsWindowsHost) return true;
+        // 用 OperatingSystem.IsWindows() 让分析器做平台流分析（File.GetUnixFileMode 在 Windows 上不可用）
+        if (OperatingSystem.IsWindows()) return true;
         try
         {
             var mode = File.GetUnixFileMode(path);
