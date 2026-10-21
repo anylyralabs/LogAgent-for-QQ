@@ -161,7 +161,7 @@ public class MessageEnricherTests : IDisposable
             "PK\u0003\u0004binary\u0000content"));
         var enricher = Make(server);
 
-        var text = await enricher.EnrichTextAsync(Msg("", [new MessageAttachment("logs.zip", $"http://127.0.0.1:{server.Port}/z", 20)]));
+        var text = await enricher.EnrichTextAsync(Msg("", [new MessageAttachment("logs.bin", $"http://127.0.0.1:{server.Port}/z", 20)]));
         Assert.Contains("不是可读文本", text);
     }
 
