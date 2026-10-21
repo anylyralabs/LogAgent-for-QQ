@@ -22,7 +22,8 @@ Restart=always
 RestartSec=10
 # systemd 停止时发 SIGTERM；应用据此切段会话后退出
 KillSignal=SIGTERM
-TimeoutStopSec=20
+# 退出时要先停频道、再生成各会话 L1 摘要（走模型），留足时间
+TimeoutStopSec=60
 
 # 资源与日志护栏
 TasksMax=256

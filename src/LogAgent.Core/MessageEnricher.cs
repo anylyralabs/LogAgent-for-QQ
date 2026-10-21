@@ -11,6 +11,8 @@ namespace LogAgent.Core;
 /// 消息内容富化（渠道无关）：把「可抓取的链接 / QQ 文件附件」解析成可读文本，并入消息文本供后续管线（会话/RAG/日志分析）使用。
 /// · logshare.cn 链接 → LogShare API 抓取日志原文 + 结构化解析（只读；不上传、不调云端 AI）；
 /// · QQ 文件附件（.log/.txt 等文本）→ 完整下载落盘到 files 目录（中间内容不丢）；
+/// · .zip/.tar.gz 等压缩包 → 只保存原文件并给出本机路径 + shell 解压指引，由模型自己 run_shell 解压、
+///   再用 search_file / read_file 读取，不在 C# 里硬实现解压；
 /// 小文件全文内联；大文件给「本机路径 + 开头/结尾片段 + 工具指引」——模型用 read_file / search_file / run_shell
 /// 自己查看任意部分（选择性读取 / 搜索 / shell），而不是由代码截取头尾省略中间。
 /// 抓取失败时以【…失败：原因】块并入文本，让模型能如实告知用户。
@@ -189,6 +191,14 @@ public sealed class MessageEnricher
                 return $"【QQ 文件「{attachment.Name}」是空文件，无内容】";
             }
 
+            // 压缩包不在 C# 里硬解压：保留原文件，让模型用 run_shell 自己列清单/解压，
+            // 再用 search_file / read_file 读取解压出的日志。
+            if (IsArchive(attachment.Name))
+            {
+                Log($"[附件] {attachment.Name} 是压缩包，已保存（{FormatSize(bytes)}），等待 shell 工具解压/读取");
+                return ArchiveAttachmentBlock(attachment, stagedPath, bytes);
+            }
+
             // 文本判定：用文件头探测（BOM/NUL/UTF-8 有效性）
             var probe = ReadHead(stagedPath, ProbeBytes);
             if (!TryDecodeText(attachment.Name, probe, out var probeText))
@@ -233,6 +243,47 @@ public sealed class MessageEnricher
             Log($"[附件] {attachment.Name} 读取失败：{ex.Message}");
             return $"【QQ 文件「{attachment.Name}」读取失败：{ex.Message}】";
         }
+    }
+
+    // ---------- 压缩包：只落盘 + 给 shell 指引，不在代码里解压 ----------
+
+    private static readonly string[] ArchiveSuffixes = [".zip", ".tar.gz", ".tgz", ".tar", ".7z", ".rar"];
+
+    private static bool IsArchive(string name) =>
+        ArchiveSuffixes.Any(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+
+    private static string ArchiveAttachmentBlock(MessageAttachment attachment, string path, long bytes)
+    {
+        var lower = attachment.Name.ToLowerInvariant();
+        var commands = lower.EndsWith(".zip", StringComparison.Ordinal)
+            ? $"""
+              · unzip -l "{path}"                                  # 查看清单
+              · mkdir -p "{path}.unzipped" && unzip -o "{path}" -d "{path}.unzipped"  # 解压
+              · 没有 unzip：python3 -c "import zipfile; zipfile.ZipFile(r'{path}').extractall(r'{path}.unzipped')"
+              · Windows 可用：tar -xf "{path}" -C "{path}.unzipped"
+              """
+            : lower.EndsWith(".tar.gz", StringComparison.Ordinal) || lower.EndsWith(".tgz", StringComparison.Ordinal)
+                ? $"""
+                  · tar -tzf "{path}"                                  # 查看清单
+                  · mkdir -p "{path}.unzipped" && tar -xzf "{path}" -C "{path}.unzipped"  # 解压
+                  """
+                : lower.EndsWith(".tar", StringComparison.Ordinal)
+                    ? $"""
+                      · tar -tf "{path}"                                   # 查看清单
+                      · mkdir -p "{path}.unzipped" && tar -xf "{path}" -C "{path}.unzipped"  # 解压
+                      """
+                    : $"""
+                      · 7z l "{path}" 或 unrar l "{path}"                   # 查看清单
+                      · 7z x "{path}" -o"{path}.unzipped" 或 unrar x "{path}" "{path}.unzipped"
+                      """;
+
+        return $"""
+            【QQ 文件「{attachment.Name}」已完整保存到本机】（{FormatSize(bytes)}）
+            本机路径：{path}
+            这是压缩包，不要直接回复“读不了”。请用 run_shell 先列清单/解压，再用 search_file / read_file 读取解压出的 .log/.txt：
+            {commands}
+            解压后优先搜索 Exception / ERROR / FATAL / SIGSEGV / crash / 退出码 / Mod 等标记。
+            """;
     }
 
     // ---------- 下载与暂存 ----------

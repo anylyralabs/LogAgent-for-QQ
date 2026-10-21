@@ -120,12 +120,14 @@ public class PromptFormatTests
         Assert.Contains("支持 Markdown", prompt);
         Assert.Contains("表格", prompt);
         Assert.Contains("3 列", prompt);
+        Assert.Contains("压缩包", prompt);
         Assert.DoesNotContain("QQ 不渲染 Markdown", prompt);
         Assert.DoesNotContain("【结论】", prompt);
 
         var analysis = Prompts.LogAnalysisRole(markdown: true);
         Assert.Contains("## 结论", analysis);
         Assert.Contains("表格", analysis);
+        Assert.Contains("压缩包", analysis);
         Assert.DoesNotContain("【结论】", analysis);
     }
 

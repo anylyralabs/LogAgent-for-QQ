@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using System.Text;
 using LogAgent.Core;
 using LogAgent.Memory;
@@ -37,6 +39,35 @@ public class MessageEnricherTests : IDisposable
         var enricher = Make(server);
         var text = await enricher.EnrichTextAsync(Msg("普通消息，没有链接"));
         Assert.Equal("普通消息，没有链接", text);
+    }
+
+    [Fact]
+    public async Task Enrich_ZipAttachment_IsSavedForShellTools()
+    {
+        var bytes = Encoding.UTF8.GetBytes("PK\u0003\u0004 fake zip payload");
+        using var http = new HttpClient(new BytesHandler(bytes));
+        var enricher = new MessageEnricher("http://127.0.0.1:1", http, _filesDir, "http://127.0.0.1:1");
+
+        var text = await enricher.FetchAttachmentAsync(
+            new MessageAttachment("crash.zip", "https://example.com/crash.zip", bytes.Length),
+            CancellationToken.None);
+
+        Assert.Contains("已完整保存到本机", text);
+        Assert.Contains("本机路径：", text);
+        Assert.Contains("unzip -l", text);
+        var pathLine = text.Split('\n').First(l => l.StartsWith("本机路径：", StringComparison.Ordinal));
+        var path = pathLine["本机路径：".Length..].Trim();
+        Assert.True(File.Exists(path), $"zip 应保留给 shell 解压：{path}");
+    }
+
+    private sealed class BytesHandler(byte[] bytes) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(bytes),
+            });
     }
 
     [Fact]
