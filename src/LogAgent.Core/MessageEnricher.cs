@@ -257,20 +257,19 @@ public sealed class MessageEnricher
         var lower = attachment.Name.ToLowerInvariant();
         var commands = lower.EndsWith(".zip", StringComparison.Ordinal)
             ? $"""
-              · unzip -l "{path}"                                  # 查看清单
-              · mkdir -p "{path}.unzipped" && unzip -o "{path}" -d "{path}.unzipped"  # 解压
-              · 没有 unzip：python3 -c "import zipfile; zipfile.ZipFile(r'{path}').extractall(r'{path}.unzipped')"
-              · Windows 可用：tar -xf "{path}" -C "{path}.unzipped"
+              · python3 -c "import zipfile; zipfile.ZipFile(r'{path}').extractall(r'{path}.unzipped')"  # 默认可用的解压方式
+              · unzip -l "{path}" 或 unzip -o "{path}" -d "{path}.unzipped"  # 若沙箱白名单允许 unzip
+              · Windows 可用：python -c "import zipfile; zipfile.ZipFile(r'{path}').extractall(r'{path}.unzipped')"
               """
             : lower.EndsWith(".tar.gz", StringComparison.Ordinal) || lower.EndsWith(".tgz", StringComparison.Ordinal)
                 ? $"""
-                  · tar -tzf "{path}"                                  # 查看清单
-                  · mkdir -p "{path}.unzipped" && tar -xzf "{path}" -C "{path}.unzipped"  # 解压
+                  · python3 -c "import tarfile; tarfile.open(r'{path}','r:gz').extractall(r'{path}.unzipped')"
+                  · tar -tzf "{path}" 或 tar -xzf "{path}" -C "{path}.unzipped"  # 若沙箱白名单允许 tar
                   """
                 : lower.EndsWith(".tar", StringComparison.Ordinal)
                     ? $"""
-                      · tar -tf "{path}"                                   # 查看清单
-                      · mkdir -p "{path}.unzipped" && tar -xf "{path}" -C "{path}.unzipped"  # 解压
+                      · python3 -c "import tarfile; tarfile.open(r'{path}','r').extractall(r'{path}.unzipped')"
+                      · tar -tf "{path}" 或 tar -xf "{path}" -C "{path}.unzipped"  # 若沙箱白名单允许 tar
                       """
                     : $"""
                       · 7z l "{path}" 或 unrar l "{path}"                   # 查看清单

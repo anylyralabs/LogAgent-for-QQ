@@ -54,7 +54,7 @@ public class MessageEnricherTests : IDisposable
 
         Assert.Contains("已完整保存到本机", text);
         Assert.Contains("本机路径：", text);
-        Assert.Contains("unzip -l", text);
+        Assert.Contains("zipfile", text);
         var pathLine = text.Split('\n').First(l => l.StartsWith("本机路径：", StringComparison.Ordinal));
         var path = pathLine["本机路径：".Length..].Trim();
         Assert.True(File.Exists(path), $"zip 应保留给 shell 解压：{path}");
