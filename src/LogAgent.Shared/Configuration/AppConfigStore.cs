@@ -48,11 +48,18 @@ public static class AppConfigStore
         if (!File.Exists(path)) return AppConfig.CreateDefault();
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         var config = JsonSerializer.Deserialize<AppConfig>(doc.RootElement.GetRawText(), JsonOpts);
-        return config ?? AppConfig.CreateDefault();
+        if (config is null) return AppConfig.CreateDefault();
+        // 旧配置（只有 OneBot11 / OfficialBot 并列字段）在这里迁成频道模型；
+        // 幂等，放在唯一读写入口最省心。
+        config.NormalizeChannels();
+        return config;
     }
 
     public static void Save(AppConfig config)
     {
+        // 保存前也规整一次：调用方可能直接 new AppConfig 或只改旧字段；
+        // 保证落盘时 Channels 已存在且格式完整（幂等）。
+        config.NormalizeChannels();
         var dir = GetConfigDirectory();
         Directory.CreateDirectory(dir);
         var path = GetConfigPath();

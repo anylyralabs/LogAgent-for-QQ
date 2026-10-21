@@ -492,3 +492,15 @@ tools/wpf-test-capture.png
 tools/state-*
 tools/*.local.py
 docs/审查报告-*.md
+
+# ── Android APK（docs/06-Android-APK方案-proroot容器.md）──
+# 构建产物：rootfs 与 .NET 负载都是几十 MB 的生成物，由 tools/android/*.sh 产出，不进仓库
+src/LogAgent.Android/assets/*.tar.gz
+src/LogAgent.Android/assets/tools/
+src/LogAgent.Android/build/
+dist/
+publish/
+# 签名材料一律不进仓库（keystore 丢了就无法覆盖升级，必须自己备份）
+*.jks
+*.keystore
+*.idsig

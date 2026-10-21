@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QQ 官方 Bot 扫码获取 AppID / AppSecret</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #2563eb;
+      --ok: #059669;
+      --warn: #d97706;
+      --err: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: var(--text);
+      background:
+        radial-gradient(1000px 500px at 10% -10%, #dbeafe 0, transparent 60%),
+        radial-gradient(900px 500px at 110% 10%, #ccfbf1 0, transparent 55%),
+        var(--bg);
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+            "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    }
+    .card {
+      width: min(720px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, .10);
+      overflow: hidden;
+    }
+    header {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 22px 26px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(120deg, #eff6ff, #ecfdf5);
+    }
+    .logo {
+      width: 46px; height: 46px; border-radius: 14px;
+      display: grid; place-items: center;
+      color: #fff; font-size: 22px; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), #0ea5e9);
+      box-shadow: 0 8px 22px rgba(37, 99, 235, .28);
+      flex: 0 0 auto;
+    }
+    h1 { margin: 0; font-size: 18px; letter-spacing: .2px; }
+    .sub { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+    .body { padding: 26px; }
+    .qr-grid {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 26px;
+      align-items: center;
+    }
+    @media (max-width: 600px) {
+      header, .body { padding: 20px; }
+      .qr-grid { grid-template-columns: 1fr; justify-items: center; }
+    }
+    .qr-wrap {
+      width: 240px; height: 240px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      display: grid; place-items: center;
+      padding: 10px;
+      box-shadow: inset 0 0 0 8px #f8fafc;
+    }
+    #qr { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .status { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .hint { margin: 0; color: var(--muted); font-size: 12.5px; }
+    .steps { margin: 14px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+    .steps li { margin: 4px 0; }
+    .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+    button {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font: inherit;
+      cursor: pointer;
+      transition: .15s ease;
+    }
+    button:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .hidden { display: none !important; }
+    .result {
+      margin-top: 24px;
+      border-top: 1px dashed var(--line);
+      padding-top: 20px;
+    }
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 6px;
+      color: var(--muted); font-size: 12.5px;
+    }
+    .field input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: #f8fafc;
+      color: var(--text);
+    }
+    .copy {
+      padding: 2px 8px;
+      border-radius: 7px;
+      font-size: 12px;
+    }
+    footer {
+      padding: 14px 26px 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      background: #fbfcfe;
+    }
+    footer p { margin: 4px 0; }
+    .warn { color: var(--warn); }
+    code {
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: #eef2ff;
+      color: #3730a3;
+      padding: 1px 5px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+<main class="card">
+  <header>
+    <div class="logo">炎</div>
+    <div>
+      <h1>QQ 官方 Bot 扫码获取凭证</h1>
+      <p class="sub">手机 QQ 扫码 → 自动取得 AppID / AppSecret</p>
+    </div>
+  </header>
+
+  <div class="body">
+    <div class="qr-grid">
+      <div class="qr-wrap"><img id="qr" alt="QQ 绑定二维码"></div>
+      <div>
+        <p id="status" class="status">正在创建绑定任务…</p>
+        <p class="hint">二维码直接来自 QQ 开放平台绑定接口，不经过任何第三方服务器。</p>
+        <ol class="steps">
+          <li>打开手机 QQ，扫描左侧二维码</li>
+          <li>按提示创建或选择机器人并完成绑定</li>
+          <li>页面自动显示 AppID / AppSecret</li>
+          <li>复制后填入 LogAgent 的「官方 Bot」页或配置文件</li>
+        </ol>
+        <div class="actions">
+          <button id="retry" class="hidden">重新生成二维码</button>
+        </div>
+      </div>
+    </div>
+
+    <section id="result" class="result hidden">
+      <div class="field">
+        <label>AppID <button class="copy" data-target="appId" type="button">复制</button></label>
+        <input id="appId" readonly>
+      </div>
+      <div class="field">
+        <label>AppSecret <button class="copy" data-target="appSecret" type="button">复制</button></label>
+        <input id="appSecret" readonly>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p class="warn">仅监听 <code>127.0.0.1</code>；AppSecret 只在本页显示，本工具不会写入磁盘，请勿截图或分享。</p>
+    <p>群聊主动推送需群主在 QQ 群设置中开启「机器人主动在群聊内发言」，否则平台会拒绝。</p>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('status');
+  const qrEl = $('qr');
+  const retryBtn = $('retry');
+  const resultEl = $('result');
+  let sessionId = null;
+  let timer = null;
+  let failures = 0;
+
+  const statusText = {
+    pending: '等待扫码…',
+    expired: '二维码已过期，正在刷新…',
+    completed: '绑定成功 ✅',
+    error: '绑定失败'
+  };
+
+  function setStatus(text, cls = '') {
+    statusEl.textContent = text;
+    statusEl.className = 'status ' + cls;
+  }
+
+  function stopPolling() {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  }
+
+  async function getJson(url, options = {}) {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const resp = await fetch(url, { ...options, cache: 'no-store', signal: ctrl.signal });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return await resp.json();
+    } catch (err) {
+      if (err && err.name === 'AbortError') throw new Error('请求超时');
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function checkHealth() {
+    try {
+      const data = await getJson('/api/health');
+      return data.ok === true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function start() {
+    stopPolling();
+    sessionId = null;
+    failures = 0;
+    resultEl.classList.add('hidden');
+    retryBtn.classList.add('hidden');
+    retryBtn.textContent = '重新生成二维码';
+    setStatus('正在创建绑定任务…');
+    qrEl.removeAttribute('src');
+
+    try {
+      const data = await getJson('/api/start', { method: 'POST' });
+      sessionId = data.id;
+      qrEl.src = `/api/qr/${sessionId}?t=${Date.now()}`;
+      poll();
+    } catch (err) {
+      setStatus('无法连接本机服务（' + location.origin + '）：' + err.message, 'err');
+      retryBtn.textContent = '重新尝试';
+      retryBtn.classList.remove('hidden');
+    }
+  }
+
+  async function poll() {
+    if (!sessionId) return;
+    try {
+      const data = await getJson(`/api/status/${sessionId}`);
+      failures = 0;
+
+      if (data.status === 'completed') {
+        setStatus('绑定成功 ✅ 凭证已获取', 'ok');
+        $('appId').value = data.appId || '';
+        $('appSecret').value = data.appSecret || '';
+        resultEl.classList.remove('hidden');
+        return;
+      }
+
+      if (data.status === 'error') {
+        setStatus('绑定失败：' + (data.error || '未知错误'), 'err');
+        retryBtn.classList.remove('hidden');
+        return;
+      }
+
+      setStatus(statusText[data.status] || data.status);
+      qrEl.src = `/api/qr/${sessionId}?t=${Date.now()}`;
+      timer = setTimeout(poll, 1500);
+    } catch (err) {
+      failures++;
+      stopPolling();
+      if (failures < 2) {
+        setStatus('轮询失败：' + err.message + '，正在重试…', 'err');
+      } else {
+        const alive = await checkHealth();
+        if (alive) {
+          setStatus(`轮询失败（第 ${failures} 次）：${err.message}；服务仍在运行，继续重试…`, 'err');
+        } else {
+          setStatus('本机服务未响应（' + location.origin + '）：请确认运行命令的终端没有关闭、端口没有被占用；' +
+                    'Termux 请先执行 termux-wake-lock 并关闭电池优化。若刚换过端口，请重新打开新地址。', 'err');
+          retryBtn.textContent = '重新连接';
+          retryBtn.classList.remove('hidden');
+        }
+      }
+      timer = setTimeout(poll, failures >= 3 ? 5000 : 2000);
+    }
+  }
+
+  retryBtn.addEventListener('click', start);
+
+  window.addEventListener('offline', () => {
+    stopPolling();
+    setStatus('网络已断开，恢复后会自动重试…', 'err');
+  });
+  window.addEventListener('online', () => {
+    if (!sessionId) return;
+    failures = 0;
+    poll();
+  });
+
+  document.querySelectorAll('.copy').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const input = $(btn.dataset.target);
+      try {
+        await navigator.clipboard.writeText(input.value);
+      } catch {
+        input.select();
+        document.execCommand('copy');
+      }
+      const old = btn.textContent;
+      btn.textContent = '已复制';
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    });
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

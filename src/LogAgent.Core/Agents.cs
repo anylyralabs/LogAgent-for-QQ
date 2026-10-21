@@ -31,9 +31,18 @@ public sealed class GroupContextAgent(
 
     public event EventHandler<string>? AgentLog;
 
-    public async Task<string> ReplyAsync(BotMessage message, SessionContext context, CancellationToken ct = default)
+    public Task<string> ReplyAsync(BotMessage message, SessionContext context, CancellationToken ct = default) =>
+        ReplyAsync(message, context, markdown: false, ct);
+
+    public async Task<string> ReplyAsync(BotMessage message, SessionContext context, bool markdown,
+        CancellationToken ct = default)
     {
-        var turns = new List<ChatTurn> { ChatTurn.System(Prompts.Xiaoyan), ChatTurn.System(Prompts.CurrentTimeLine()) };
+        var turns = new List<ChatTurn>
+        {
+            ChatTurn.System(Prompts.XiaoyanFor(markdown)),
+            ChatTurn.System(Prompts.CurrentTimeLine()),
+            ChatTurn.System(Prompts.ChatContextLine(message.ChatType, message.ChannelName)),
+        };
 
         // RAG 检索（仅 approved 知识）
         if (knowledge is not null && knowledgeConfig is { Enabled: true })

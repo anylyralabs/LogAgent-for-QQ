@@ -115,6 +115,7 @@ public sealed class AgentHost : IAsyncDisposable
             SenderId = "console",
             SenderName = "本机",
             Text = text,
+            ChannelName = "本机对话",
         };
         await _runtime!.OnMessageAsync(_localBridge, message, ct);
     }
@@ -229,7 +230,7 @@ public sealed class AgentHost : IAsyncDisposable
         }
 
         public Task<bool> TrySendForwardAsync(string chatId, ChatType chatType,
-            IReadOnlyList<string> sections, CancellationToken ct = default)
+            IReadOnlyList<string> sections, string? replyToMessageId = null, CancellationToken ct = default)
         {
             if (chatId != LocalChatId) return Task.FromResult(false);
             Reply?.Invoke(string.Join("\n\n", sections));

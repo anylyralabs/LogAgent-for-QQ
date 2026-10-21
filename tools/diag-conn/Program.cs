@@ -20,14 +20,15 @@ if (args.Length >= 1 && args[0] == "inject-napcat")
 {
     var dir = config.NapCat.ResolveDirectory();
     Console.WriteLine($"NapCat dir: {dir}");
-    var files = NapCatConfigWriter.EnsureReverseWs(dir, config.OneBot11.Port, config.OneBot11.Token);
+    var oneBot = config.EffectiveOneBot11();
+    var files = NapCatConfigWriter.EnsureReverseWs(dir, oneBot.Port, oneBot.Token);
     Console.WriteLine($"updated {files.Count} file(s):");
     foreach (var f in files) Console.WriteLine($"  {f}");
     return;
 }
 
-var ob = config.OfficialBot;
-Console.WriteLine($"AppId={ob.AppId} Sandbox={ob.Sandbox} SecretLen={ob.AppSecret.Length}");
+var ob = config.EffectiveOfficialBot();
+Console.WriteLine($"AppId={ob.AppId} Sandbox={ob.Sandbox} SecretLen={ob.AppSecret.Length} Markdown={ob.MarkdownSupport}");
 
 var conn = new OfficialBotConnection(ob);
 conn.ConnectionLog += (_, line) => Console.WriteLine($"[log] {line}");

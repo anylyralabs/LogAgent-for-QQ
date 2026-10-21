@@ -28,7 +28,7 @@
                         · 分析日志文件，给出带证据的根因报告<LineBreak/>
                         · 从群友回答和网页中学习新知识，越用越懂行<LineBreak/><LineBreak/>
                         接下来两步：<Run FontWeight="Medium">① 配置一个模型通道</Run>（任意 OpenAI 兼容接口，可跳过稍后配）→
-                        <Run FontWeight="Medium">② 扫码接入 QQ</Run>（需要本机已装 NapCat）。
+                        <Run FontWeight="Medium">② 接入 QQ</Run>（官方 Bot 优先；NapCat 作为备用通道）。
                     </TextBlock>
                 </StackPanel>
 
@@ -64,11 +64,13 @@
                     <TextBlock Text="没有 API Key？可以先跳过，稍后在「模型路由」页配置。" FontSize="12" Foreground="{StaticResource TextTertiary}" Margin="0,16,0,0"/>
                 </StackPanel>
 
-                <!-- Step 2: NapCat 指引 -->
+                <!-- Step 2: QQ 接入指引（官方 Bot 优先，NapCat 备用） -->
                 <StackPanel x:Name="Step2" Visibility="Collapsed">
-                    <TextBlock Text="② 接入 QQ（NapCat）" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                    <TextBlock Text="② 接入 QQ（官方 Bot 优先）" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
                     <TextBlock FontSize="13.5" Foreground="{StaticResource TextSecondary}" LineHeight="26" TextWrapping="Wrap">
-                        完成向导后，去左侧「NapCat 管理」页：<LineBreak/>
+                        <Run FontWeight="SemiBold">推荐：官方 Bot</Run> —— 左侧「官方 Bot」页扫码创建/绑定，凭证会自动填入并保存，
+                        点「连接」即可。支持 Markdown、主动消息；群聊主动发言需群主在 QQ 里开启。<LineBreak/><LineBreak/>
+                        <Run FontWeight="SemiBold">备用：NapCat</Run> —— 去左侧「NapCat 管理」页：<LineBreak/>
                         1. 填入 NapCat 目录（Shell 版解压目录）→ 启动 NapCat<LineBreak/>
                         2. 用手机 QQ 扫码登录（二维码直接显示在页面里）<LineBreak/>
                         3. NapCat WebUI 里添加反向 WebSocket，地址填：<LineBreak/>

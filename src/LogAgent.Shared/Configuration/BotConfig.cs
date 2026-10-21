@@ -38,6 +38,12 @@ public sealed class OfficialBotConfig
     public string AppId { get; set; } = "";
     public string AppSecret { get; set; } = "";
     public bool Sandbox { get; set; }
+
+    /// <summary>
+    /// 使用 Markdown 消息（<c>msg_type=2</c>）。平台拒绝时自动回退纯文本，
+    /// 因此默认开启也不会导致消息发不出去。
+    /// </summary>
+    public bool MarkdownSupport { get; set; } = true;
 }
 
 /// <summary>NapCat WebUI 配置文件片段（webui.json，用于自动提取 token）。</summary>

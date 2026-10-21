@@ -42,7 +42,7 @@ public partial class DashboardPage : Page
         if (AppHost.OfficialBotRunning)
         {
             SetState(OfficialBotState, "已连接", OkBrush);
-            OfficialBotSub.Text = $"AppId {liveConfig.OfficialBot.AppId}";
+            OfficialBotSub.Text = $"AppId {liveConfig.EffectiveOfficialBot().AppId}";
         }
         else
         {
@@ -51,7 +51,7 @@ public partial class DashboardPage : Page
         }
 
         // OneBot 服务
-        var obConfig = liveConfig.OneBot11;
+        var obConfig = liveConfig.EffectiveOneBot11();
         if (AppHost.OneBotServerStarted)
         {
             SetState(OneBotState, "运行中", OkBrush);

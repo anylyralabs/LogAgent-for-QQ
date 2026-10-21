@@ -23,6 +23,7 @@ namespace LogAgent.Headless;
 ///   LogAgent.Headless serve                   # 常驻服务（按配置自动连接 OneBot/官方 Bot）
 ///   LogAgent.Headless providers               # 列出已配置 provider 与规则链
 ///   LogAgent.Headless chat "你好"             # 走一次 Chat 分流补全
+///   LogAgent.Headless send group &lt;openid&gt; "公告"  # 主动推送（官方 Bot 群聊需群主开启）
 ///   LogAgent.Headless import-kb &lt;路径&gt;        # 导入知识库文档（文件或目录，.md/.txt/.log）
 ///   LogAgent.Headless export chat out.jsonl   # 导出训练数据（chat|sharegpt|alpaca|dpo）
 ///   LogAgent.Headless config path             # 打印配置目录 / 配置文件路径
@@ -43,6 +44,7 @@ public static class Program
                 case "serve": return await RunServeAsync();
                 case "providers": return RunProviders();
                 case "chat" when args.Length >= 2: return await RunChatAsync(args[1]);
+                case "send" when args.Length >= 4: return await RunSendAsync(args);
                 case "import-kb" when args.Length >= 2: return await RunImportKbAsync(args[1]);
                 case "export" when args.Length >= 2:
                     return RunExport(args[1], args.Length >= 3 ? args[2] : "export.jsonl");
@@ -68,9 +70,11 @@ public static class Program
         Console.WriteLine($"  配置：{AppConfigStore.GetConfigPath()}");
         Console.WriteLine();
         Console.WriteLine("子命令：");
-        Console.WriteLine("  serve                    常驻服务（自动连接 OneBot / 官方 Bot）");
+        Console.WriteLine("  serve                    常驻服务（按频道优先级连接：官方 Bot 优先）");
         Console.WriteLine("  providers                列出 provider 与分流规则");
         Console.WriteLine("  chat <文本>              走一次 Chat 分流补全");
+        Console.WriteLine("  send <group|private> <chatId> <文本> [--channel <id>]");
+        Console.WriteLine("                           主动推送（官方 Bot 群聊需群主开启主动发言）");
         Console.WriteLine("  import-kb <路径>         导入知识库文档（文件或目录）");
         Console.WriteLine("  export <格式> [输出路径]  导出训练数据（chat|sharegpt|alpaca|dpo）");
         Console.WriteLine("  config path              打印配置目录与配置文件路径");
@@ -90,8 +94,9 @@ public static class Program
     // ─────────────────────────── serve ───────────────────────────
 
     /// <summary>
-    /// 常驻服务：装配 <see cref="AgentHost"/>，按配置连接 OneBot11 反向 WS / 官方 Bot / NapCat，
-    /// 收到 SIGTERM / SIGINT 时切段会话再退出（systemd 与 docker stop 的默认信号）。
+    /// 常驻服务：装配 <see cref="AgentHost"/>，按频道优先级连接所有启用频道（官方 Bot 优先，
+    /// 其次 OneBot11 / NapCat），收到 SIGTERM / SIGINT 时切段会话再退出
+    /// （systemd 与 docker stop 的默认信号）。
     /// </summary>
     private static async Task<int> RunServeAsync()
     {
@@ -128,55 +133,32 @@ public static class Program
             };
         }
 
-        OneBot11Connection? oneBot = null;
-        OfficialBotConnection? officialBot = null;
-        var bridge = new ReplyBridge(() => oneBot, () => officialBot);
-
-        if (config.OneBot11.Enabled)
+        await using var channels = new ChannelManager(config.Channels ?? []);
+        channels.Log += (_, line) => Console.WriteLine(line);
+        channels.MessageReceived += async (_, e) =>
         {
             try
             {
-                oneBot = new OneBot11Connection(config.OneBot11);
-                oneBot.ConnectionLog += (_, line) => Console.WriteLine(line);
-                oneBot.MessageReceived += async (_, e) =>
-                {
-                    try { await host.Runtime!.OnMessageAsync(bridge, e.Message); }
-                    catch (Exception ex) { Console.Error.WriteLine($"[Runtime] 处理消息失败：{ex.Message}"); }
-                };
-                await oneBot.StartAsync(shutdown.Token);
+                // 从哪个频道收到，就从哪个频道回复（不再依赖 OneBot/官方 Bot 的全局先后顺序）
+                await host.Runtime!.OnMessageAsync(channels.CreateSender(e.ChannelId), e.Message);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[OneBot11] 启动失败：{ex.Message}（服务继续运行，其他通道不受影响）");
+                Console.Error.WriteLine($"[Runtime] 处理消息失败：{ex.Message}");
             }
-        }
+        };
+        await channels.StartAllAsync(shutdown.Token); // 单频道失败只记录，不影响其他频道
 
-        if (config.OfficialBot.Enabled)
+        // NapCat 只跟随启用的 OneBot11 频道启动；官方 Bot 频道无需本地协议端。
+        var oneBotChannel = config.FindChannel(ChannelTransport.OneBot11);
+        if (oneBotChannel is { Enabled: true } && !string.IsNullOrWhiteSpace(config.NapCat.ScriptPath))
         {
             try
             {
-                officialBot = new OfficialBotConnection(config.OfficialBot);
-                officialBot.ConnectionLog += (_, line) => Console.WriteLine(line);
-                officialBot.MessageReceived += async (_, e) =>
-                {
-                    try { await host.Runtime!.OnMessageAsync(bridge, e.Message); }
-                    catch (Exception ex) { Console.Error.WriteLine($"[Runtime] 处理消息失败：{ex.Message}"); }
-                };
-                await officialBot.StartAsync();
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[官方Bot] 连接失败：{ex.Message}");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(config.NapCat.ScriptPath))
-        {
-            try
-            {
+                var oneBot = oneBotChannel.OneBot11;
                 var napCat = new NapCatManager(config.NapCat);
                 napCat.ManagerLog += (_, line) => Console.WriteLine(line);
-                napCat.InjectReverseWsConfig(config.OneBot11.Port, config.OneBot11.Token);
+                napCat.InjectReverseWsConfig(oneBot.Port, oneBot.Token);
                 if (!napCat.IsRunning) await napCat.StartAsync(shutdown.Token);
             }
             catch (Exception ex)
@@ -189,44 +171,106 @@ public static class Program
         try { await Task.Delay(Timeout.InfiniteTimeSpan, shutdown.Token); }
         catch (OperationCanceledException) { /* 正常停机信号 */ }
 
-        // 优雅退出：先切段会话（保住 L1 摘要），再停连接
+        // 优雅退出：先停频道（把合并窗口里的消息放出去），再切段会话保住 L1 摘要
+        await channels.StopAllAsync();
         await host.CutAllSessionsAsync("shutdown");
-        if (oneBot is not null)
-        {
-            try { await oneBot.StopAsync(); } catch (Exception ex) { Console.Error.WriteLine($"[OneBot11] 停止异常：{ex.Message}"); }
-        }
-        if (officialBot is not null)
-        {
-            try { await officialBot.StopAsync(); } catch (Exception ex) { Console.Error.WriteLine($"[官方Bot] 停止异常：{ex.Message}"); }
-        }
         foreach (var s in signals) s.Dispose();
         Console.WriteLine("[退出] 完成");
         return 0;
     }
 
-    /// <summary>把 Agent 回复发回当前在线的连接（OneBot 优先，官方 Bot 兜底）。</summary>
-    private sealed class ReplyBridge(Func<OneBot11Connection?> oneBot, Func<OfficialBotConnection?> official) : IBotConnectionFactory
+    // ─────────────────────────── 既有子命令 ───────────────────────────
+
+    /// <summary>
+    /// 主动推送：按频道抽象启动一个频道，发送不带 msg_id 的主动消息。
+    /// 官方 Bot 群聊需要群主在 QQ 群设置中开启「机器人主动在群聊内发言」；
+    /// 单聊受用户主动消息开关与平台频控限制。
+    /// </summary>
+    private static async Task<int> RunSendAsync(string[] args)
     {
-        public async Task SendTextAsync(string chatId, ChatType chatType, string text, string? replyToMessageId, CancellationToken ct = default)
+        ChatType chatType;
+        switch (args[1].ToLowerInvariant())
         {
-            // 优先用「已连入」的通道（OneBot 服务在监听但 NapCat 未连入时，优先走官方 Bot）
-            if (oneBot() is { IsConnected: true } conn)
-            {
-                await conn.SendTextAsync(chatId, chatType, text, replyToMessageId, ct);
-                return;
-            }
-            if (official() is { IsConnected: true } bot)
-                await bot.SendTextAsync(chatId, chatType, text, replyToMessageId, ct);
+            case "group" or "g" or "群" or "群聊": chatType = ChatType.Group; break;
+            case "private" or "p" or "c2c" or "私聊": chatType = ChatType.Private; break;
+            default:
+                Console.Error.WriteLine("目标类型应为 group 或 private");
+                return 1;
         }
 
-        public async Task<bool> TrySendForwardAsync(string chatId, ChatType chatType, IReadOnlyList<string> sections, CancellationToken ct = default)
+        var chatId = args[2].Trim();
+        var channelId = "";
+        var textParts = new List<string>();
+        for (var i = 3; i < args.Length; i++)
         {
-            if (oneBot() is { IsConnected: true } conn) return await conn.SendForwardAsync(chatId, chatType, sections, ct);
-            return false; // 官方 Bot 无合并转发
+            if (args[i] == "--channel" && i + 1 < args.Length)
+            {
+                channelId = args[++i];
+                continue;
+            }
+            textParts.Add(args[i]);
+        }
+
+        var text = string.Join(" ", textParts).Trim();
+        if (chatId.Length == 0 || text.Length == 0)
+        {
+            Console.Error.WriteLine("目标 chatId 与消息内容不能为空");
+            return 1;
+        }
+
+        var config = AppConfigStore.Load();
+        var channel = string.IsNullOrWhiteSpace(channelId)
+            ? config.ActiveChannels().FirstOrDefault()
+            : config.Channels?.FirstOrDefault(c =>
+                string.Equals(c.Id, channelId, StringComparison.OrdinalIgnoreCase));
+        if (channel is null)
+        {
+            Console.Error.WriteLine(string.IsNullOrWhiteSpace(channelId)
+                ? "没有启用的频道（先在 config.json 的 Channels 里启用一个）"
+                : $"未找到频道 {channelId}");
+            return 1;
+        }
+
+        await using var manager = new ChannelManager([channel]);
+        manager.Log += (_, line) => Console.WriteLine(line);
+        if (!await manager.StartAsync(channel.Id))
+        {
+            Console.Error.WriteLine($"频道启动失败：{manager.Find(channel.Id)?.LastError}");
+            return 1;
+        }
+
+        // OneBot11 需要 NapCat 已经连入；官方 Bot 的 HTTP 发送只依赖 access_token（StartAsync 已获取）。
+        if (channel.IsOneBot11)
+        {
+            for (var i = 0; i < 20 && manager.Find(channel.Id)?.Connected != true; i++)
+                await Task.Delay(500);
+            if (manager.Find(channel.Id)?.Connected != true)
+            {
+                Console.Error.WriteLine("[主动发送] OneBot11 尚无 NapCat 连入，无法发送");
+                await manager.StopAllAsync();
+                return 1;
+            }
+        }
+
+        try
+        {
+            await manager.CreateSender(channel.Id).SendProactiveAsync(chatId, chatType, text);
+            Console.WriteLine($"已提交主动消息 → {chatType}:{chatId}（频道 {channel.Name}）");
+            Console.WriteLine(channel.IsOfficial && chatType == ChatType.Group
+                ? "提示：群主需在 QQ 群设置中开启「机器人主动在群聊内发言」，否则平台会拒绝。"
+                : "提示：平台可能因用户主动消息开关或频控拒绝，详见连接日志。");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"发送失败：{ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            await manager.StopAllAsync();
         }
     }
-
-    // ─────────────────────────── 既有子命令 ───────────────────────────
 
     private static async Task<int> RunImportKbAsync(string path)
     {
@@ -386,10 +430,27 @@ public static class Program
             Console.WriteLine($"   MCP {server.Name}（{server.Transport}）：{(found is null ? "未找到命令" : found)}");
         }
 
-        if (config.OneBot11.Enabled)
+        foreach (var channel in config.Channels ?? [])
         {
-            var inUse = IsPortInUse(config.OneBot11.Host, config.OneBot11.Port);
-            Console.WriteLine($"   OneBot11 监听 {config.OneBot11.Host}:{config.OneBot11.Port}：{(inUse ? "端口已被占用（可能已有实例）" : "端口空闲（启动时会监听）")}");
+            var state = channel.Enabled ? "启用" : "未启用";
+            if (channel.IsOneBot11)
+            {
+                var inUse = channel.Enabled && IsPortInUse(channel.OneBot11.Host, channel.OneBot11.Port);
+                Console.WriteLine($"   频道 {channel.Name}（OneBot11，优先级 {channel.Priority}）：{state}，" +
+                                  $"监听 {channel.OneBot11.Host}:{channel.OneBot11.Port}" +
+                                  (channel.Enabled ? inUse ? "（端口已被占用）" : "（端口空闲）" : ""));
+            }
+            else if (channel.IsOfficial)
+            {
+                var (appId, appSecret) = channel.ResolveOfficialCredentials();
+                var ready = !string.IsNullOrWhiteSpace(appId) && !string.IsNullOrWhiteSpace(appSecret);
+                Console.WriteLine($"   频道 {channel.Name}（官方 Bot，优先级 {channel.Priority}）：{state}，" +
+                                  $"凭证{(ready ? "已配置" : "未配置")}，Markdown {(channel.MarkdownSupport ? "开" : "关")}");
+            }
+            else
+            {
+                Console.WriteLine($"   频道 {channel.Name}（{channel.Transport}，优先级 {channel.Priority}）：{state}（传输方式暂不支持）");
+            }
         }
 
         Check("模型 Provider 已配置", config.Providers.Any(p => p.Enabled));

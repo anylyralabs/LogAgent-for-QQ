@@ -248,7 +248,7 @@ L0 原文（全量保存，训练数据原料）
 | UI       | WPF + CommunityToolkit.Mvvm                 | 成熟、资料多、好维护             |
 | Agent 框架 | Microsoft Agent Framework + Semantic Kernel | 微软官方战略方向，C# 原生，MCP 支持  |
 | 模型接入     | OpenAI 兼容 `IChatClient` 抽象                  | 一套代码接任意 provider       |
-| 协议       | 自研 OneBot11 适配器（WebSocket）+ 官方 Bot SDK 封装   | 双协议统一 `IBotConnection` |
+| 协议       | 自研 OneBot11 适配器（WebSocket）+ 官方 Bot SDK 封装   | 双协议统一 `ChannelManager` + `IBotConnection` |
 | 存储       | SQLite + FTS5 + sqlite-vec                  | 单文件零运维，本地优先；向量+关键词混合检索 |
 | 网页抓取     | HtmlAgilityPack + 正文提取                      | 学习 Agent 的 WebTools 底座 |
 | 日志解析     | Serilog（应用日志）+ 自研规则解析器                      | 支持多格式 + 自定义正则          |
@@ -282,7 +282,7 @@ L0 原文（全量保存，训练数据原料）
 | 风险                     | 对策                                                        |
 | ---------------------- | --------------------------------------------------------- |
 | NapCat/QQ 个人号风控        | 用养过的号；固定 machine-id；不频繁扫码；WebUI 不暴露公网；同时保留官方 Bot 通道作为合规备份 |
-| 官方 Bot 群聊只能被动回复（5分钟窗口） | 适配器内做消息队列+窗口内合并回复；主动推送需求走 NapCat 通道                       |
+| 官方 Bot 群聊被动回复 5 分钟窗口（主动消息需群主开启） | 窗口内合并回复；超时/超次数自动降级主动消息，群聊主动消息依赖群主设置 |
 | 大日志文件 token 爆炸         | 本地优先统计降采样；只送异常簇关键行；超长报告转图片/文件                             |
 | 自学习引入错误知识              | 候选区+审核机制；知识质量反馈分；可回滚（知识条目带来源和版本）                          |
 | 单模型服务不可用               | 路由器熔断+备选链；多 provider 配置；健康探测                              |

@@ -147,7 +147,8 @@ internal sealed class FormatTestBridge : IBotConnectionFactory
         return Task.CompletedTask;
     }
 
-    public Task<bool> TrySendForwardAsync(string chatId, ChatType chatType, IReadOnlyList<string> sections, CancellationToken ct = default)
+    public Task<bool> TrySendForwardAsync(string chatId, ChatType chatType, IReadOnlyList<string> sections,
+        string? replyToMessageId = null, CancellationToken ct = default)
     {
         if (!ForwardSupported) return Task.FromResult(false);
         Forwards.Add(sections);

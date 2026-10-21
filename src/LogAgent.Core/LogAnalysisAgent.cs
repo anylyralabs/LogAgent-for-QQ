@@ -29,21 +29,24 @@ public sealed class LogAnalysisAgent(
 
     public event EventHandler<string>? AnalysisLog;
 
-    public async Task<string> AnalyzeAsync(string logText, CancellationToken ct = default)
+    public Task<string> AnalyzeAsync(string logText, CancellationToken ct = default) =>
+        AnalyzeAsync(logText, markdown: false, ct);
+
+    public async Task<string> AnalyzeAsync(string logText, bool markdown, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(logText))
             return "这段内容没有可识别的行，看起来不是日志。把日志文本直接发给我试试～";
 
         // 文件模式：消息引用了本机已落盘的日志文件（富化环节写入的「本机路径」）→ 用工具查看全文
         if (TryExtractStagedFilePath(logText, out var filePath))
-            return await AnalyzeFileAsync(logText, filePath, ct);
+            return await AnalyzeFileAsync(logText, filePath, markdown, ct);
 
-        return await AnalyzeTextAsync(logText, ct);
+        return await AnalyzeTextAsync(logText, markdown, ct);
     }
 
     // ---------- 文件模式：模型用工具查看完整文件（中间不省略） ----------
 
-    private async Task<string> AnalyzeFileAsync(string requestText, string filePath, CancellationToken ct)
+    private async Task<string> AnalyzeFileAsync(string requestText, string filePath, bool markdown, CancellationToken ct)
     {
         var fileName = Path.GetFileName(filePath);
         long sizeBytes;
@@ -70,12 +73,12 @@ public sealed class LogAnalysisAgent(
             // 无工具（理论兜底）：取文件头样本走文本统计
             var sample = ReadFileSample(filePath, 200 * 1024);
             Log("工具未启用，退化为文件头样本分析");
-            return await AnalyzeTextAsync(sample, ct);
+            return await AnalyzeTextAsync(sample, markdown, ct);
         }
 
         var turns = new List<ChatTurn>
         {
-            ChatTurn.System(Prompts.LogAnalysisRole),
+            ChatTurn.System(Prompts.LogAnalysisRole(markdown)),
             ChatTurn.System(Prompts.CurrentTimeLine()),
             ChatTurn.User(intro),
         };
@@ -199,7 +202,7 @@ public sealed class LogAnalysisAgent(
 
     // ---------- 文本模式：粘贴日志的本地统计流程 ----------
 
-    private async Task<string> AnalyzeTextAsync(string logText, CancellationToken ct)
+    private async Task<string> AnalyzeTextAsync(string logText, bool markdown, CancellationToken ct)
     {
         // ---- Step 1: 本地统计 ----
         if (string.IsNullOrWhiteSpace(logText))
@@ -223,7 +226,7 @@ public sealed class LogAnalysisAgent(
         // ---- Step 3: 根因推断 ----
         var analysis = await router.CompleteAsync(
             TaskType.LogAnalysis,
-            [ChatTurn.System(Prompts.LogAnalysisRole), ChatTurn.System(Prompts.CurrentTimeLine()), ChatTurn.User(material + cases)],
+            [ChatTurn.System(Prompts.LogAnalysisRole(markdown)), ChatTurn.System(Prompts.CurrentTimeLine()), ChatTurn.User(material + cases)],
             maxTokens: 2000, temperature: 0.3, ct: ct);
         Log($"根因推断完成（{analysis.PromptTokens}+{analysis.CompletionTokens} tokens）");
 

@@ -164,8 +164,8 @@ public sealed class NapCatViewModel : ObservableObject
         var config = AppConfigStore.Load();
         NapCatScript = config.NapCat.ScriptPath;
         WebUiPort = config.NapCat.WebUiPort;
-        OneBotPort = config.OneBot11.Port;
-        OneBotToken = config.OneBot11.Token;
+        OneBotPort = config.EffectiveOneBot11().Port;
+        OneBotToken = config.EffectiveOneBot11().Token;
         ServiceRunning = AppHost.OneBotServerStarted;
         _manager = new NapCatManager(config.NapCat);
         _manager.ManagerLog += (_, line) => Log(line);
@@ -185,11 +185,12 @@ public sealed class NapCatViewModel : ObservableObject
         config.NapCat.Directory = Path.GetDirectoryName(NapCatScript) ?? ""; // 派生目录（webui.json 定位）
         config.NapCat.WebUiPort = WebUiPort;
         config.NapCat.WebUiToken = WebUiToken;
-        config.OneBot11.Port = OneBotPort;
-        config.OneBot11.Token = OneBotToken;
-        config.OneBot11.Enabled = true;
+        var channel = config.GetOrAddChannel(ChannelTransport.OneBot11);
+        channel.OneBot11.Port = OneBotPort;
+        channel.OneBot11.Token = OneBotToken;
+        channel.Enabled = true;
         AppConfigStore.Save(config);
-        AppHost.Router.Config.OneBot11 = config.OneBot11;
+        AppHost.Router.Config.Channels = config.Channels;
         Log("配置已保存");
         LoadConfig();
     }

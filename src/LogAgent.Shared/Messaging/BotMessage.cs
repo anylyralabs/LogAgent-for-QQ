@@ -22,6 +22,13 @@ public sealed class BotMessage
     public bool MentionedMe { get; init; }
     public string? RawJson { get; init; }
 
+    /// <summary>来源频道 ID/名称（由 ChannelManager 填写；本机对话为空）。</summary>
+    public string? ChannelId { get; set; }
+    public string? ChannelName { get; set; }
+
+    /// <summary>来源频道是否支持 Markdown（官方 Bot 开启时为 true）。</summary>
+    public bool SupportsMarkdown { get; set; }
+
     /// <summary>附件列表（QQ 文件；由连接层解析并解析出下载地址，内容由消息富化环节读取）。</summary>
     public IReadOnlyList<MessageAttachment>? Attachments { get; init; }
 

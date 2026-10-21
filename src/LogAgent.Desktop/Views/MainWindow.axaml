@@ -47,8 +47,8 @@
             <Grid Grid.Row="0" Margin="32,24,32,12" ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0" Text="{Binding PageTitle}" FontSize="22" FontWeight="SemiBold"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button Content="启动服务" Command="{Binding StartOneBotCommand}"/>
-                    <Button Content="停止服务" Command="{Binding StopOneBotCommand}"/>
+                    <Button Content="启动 OneBot" Command="{Binding StartOneBotCommand}"/>
+                    <Button Content="停止 OneBot" Command="{Binding StopOneBotCommand}"/>
                 </StackPanel>
             </Grid>
 

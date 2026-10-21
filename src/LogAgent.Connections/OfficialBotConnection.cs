@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using LogAgent.Shared.Configuration;
 using LogAgent.Shared.Connections;
 using LogAgent.Shared.Messaging;
@@ -11,9 +13,15 @@ namespace LogAgent.Connections;
 
 /// <summary>
 /// QQ 官方机器人适配器（开放平台 API v2）：
-/// access_token → gateway → WS（op10 Hello / op2 Identify / op1 心跳 / op0 事件 / op6 Resume）
-/// 被动回复：POST /v2/groups/{openid}/messages 或 /v2/users/{openid}/messages，携带 msg_id（5 分钟窗口、限 5 次）。
-/// 规划 3.1B。未经真机联调，凭证链路以官方文档为准（bot.q.qq.com）。
+/// access_token → gateway → WS（op10 Hello / op2 Identify / op1 心跳 / op0 事件 / op6 Resume）。
+/// 发送侧对齐 OpenClaw 的 QQ Bot 能力：
+/// <list type="bullet">
+/// <item>被动回复：携带 msg_id（5 分钟窗口、限 5 次），超限/过期自动降级主动消息；</item>
+/// <item>Markdown：<c>msg_type=2</c>，平台无权限/内容不合法时自动回退纯文本；</item>
+/// <item>合并消息：没有转发卡片，把多个分节合并成一条消息；</item>
+/// <item>主动消息：不带 msg_id；群聊主动消息需群主开启「机器人主动在群聊内发言」。</item>
+/// </list>
+/// 规划 3.1B。凭证链路以官方文档为准（bot.q.qq.com）。
 /// </summary>
 public sealed class OfficialBotConnection : IBotConnection
 {
@@ -22,17 +30,23 @@ public sealed class OfficialBotConnection : IBotConnection
     private static readonly Uri SandboxBase = new("https://sandbox.api.sgroup.qq.com");
 
     private readonly OfficialBotConfig _config;
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private readonly HttpClient _http;
+    private readonly bool _ownsHttp;
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private Task? _worker;
 
+    private const int MaxPassiveReplies = 5;
+    /// <summary>官方 Bot 单条消息的保守长度上限（超过则回退分段发送）。</summary>
+    private const int MaxMergedMessageLength = 4500;
+
     private string? _accessToken;
     private DateTimeOffset _tokenExpiresAt;
     private string? _sessionId;
+    private string? _selfOpenId;
     private long _lastSeq;
-    private readonly ConcurrentDictionary<string, byte> _rateWindow = new(); // M1 简易限频
-    private readonly ConcurrentDictionary<string, int> _replyCount = [];     // 每个 msg_id 回复次数（≤5）
+    private readonly ConcurrentDictionary<string, int> _replyCount = [];     // 每个 msg_id 回复序号（≤5）
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _seenMessages = []; // 平台可能重复推送同一 msg_id
 
     public string Name => $"QQ官方Bot ({_config.AppId}{(_config.Sandbox ? " 沙箱" : "")})";
     public bool IsConnected => _ws is { State: WebSocketState.Open };
@@ -40,7 +54,12 @@ public sealed class OfficialBotConnection : IBotConnection
     public event EventHandler<MessageReceivedEventArgs>? MessageReceived;
     public event EventHandler<string>? ConnectionLog;
 
-    public OfficialBotConnection(OfficialBotConfig config) => _config = config;
+    public OfficialBotConnection(OfficialBotConfig config, HttpClient? http = null)
+    {
+        _config = config;
+        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _ownsHttp = http is null;
+    }
 
     private Uri ApiBase => _config.Sandbox ? SandboxBase : ProdBase;
 
@@ -60,55 +79,220 @@ public sealed class OfficialBotConnection : IBotConnection
     public async Task StopAsync(CancellationToken ct = default)
     {
         _cts?.Cancel();
-        if (_ws is { State: WebSocketState.Open })
+        // 直接 Abort 打断 ReceiveAsync；WebSocket 关闭握手在网关异常时可能一直等，
+        // 会让 systemd 触发 TimeoutStopSec 并错过“切段会话”。
+        try { _ws?.Abort(); }
+        catch (WebSocketException) { }
+        catch (ObjectDisposedException) { }
+
+        if (_worker is not null)
         {
-            try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "shutdown", ct); }
-            catch (WebSocketException) { }
+            try { await _worker.WaitAsync(TimeSpan.FromSeconds(5), ct); }
+            catch (OperationCanceledException) { }
+            catch (TimeoutException) { Log("WS 接收循环未在 5s 内退出，继续停止"); }
         }
-        if (_worker is not null) { try { await _worker; } catch (OperationCanceledException) { } }
         Log("官方 Bot 已停止");
     }
 
     public async Task SendTextAsync(string chatId, ChatType chatType, string text, string? replyToMessageId = null, CancellationToken ct = default)
-    {
-        if (replyToMessageId is null)
-        {
-            // 主动消息受用户开关与配额限制，M1 仅记录告警
-            Log("警告：官方 Bot 群聊仅支持被动回复（需 msg_id），主动消息可能失败");
-        }
-        else
-        {
-            var used = _replyCount.AddOrUpdate(replyToMessageId, 1, (_, n) => n + 1);
-            if (used > 5)
-            {
-                Log($"msg_id={replyToMessageId} 回复次数超限（5 次），放弃发送");
-                return;
-            }
-        }
+        => await SendTextCoreAsync(chatId, chatType, text, replyToMessageId, _config.MarkdownSupport, ct);
 
-        // 全局 800 次/分钟简易限频：滑窗内超过 700 暂缓
-        while (_rateWindow.Count > 700)
-        {
-            _rateWindow.Clear(); // M1 简化：整窗清空；M5 换令牌桶
-            break;
-        }
+    /// <summary>
+    /// 官方 Bot 没有合并转发卡片，改用「合并为一条消息」：
+    /// 把多个分节拼成一条 Markdown/文本，避免一次回复消耗多次被动回复额度。
+    /// 合并后仍超长时返回 false，由回复策略回退分段发送。
+    /// </summary>
+    public async Task<bool> TrySendForwardAsync(string chatId, ChatType chatType,
+        IReadOnlyList<string> sections, string? replyToMessageId = null, CancellationToken ct = default)
+    {
+        if (sections.Count == 0) return false;
+        var merged = string.Join("\n\n", sections);
+        if (merged.Length == 0 || merged.Length > MaxMergedMessageLength) return false;
+        return await SendTextCoreAsync(chatId, chatType, merged, replyToMessageId, _config.MarkdownSupport, ct);
+    }
+
+    /// <summary>
+    /// 统一发送：优先被动回复（带 msg_id）；额度/时间窗口耗尽或主动发送时退化为无 msg_id 的主动消息。
+    /// Markdown 被平台拒绝时自动回退纯文本，保证「能发出去」优先。
+    /// </summary>
+    private async Task<bool> SendTextCoreAsync(string chatId, ChatType chatType, string text,
+        string? replyToMessageId, bool markdown, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
 
         var path = chatType == ChatType.Group
             ? $"/v2/groups/{chatId}/messages"
             : $"/v2/users/{chatId}/messages";
-        var body = new Dictionary<string, object?>
+        var uri = new Uri(ApiBase, path);
+
+        var passive = !string.IsNullOrEmpty(replyToMessageId);
+        var msgId = replyToMessageId;
+        var seq = 0;
+        void AllocatePassiveSeq()
         {
-            ["msg_type"] = 0,
-            ["content"] = text,
-            ["msg_id"] = replyToMessageId,
-            ["msg_seq"] = _replyCount.TryGetValue(replyToMessageId ?? "", out var seq) ? seq : 1,
-        };
-        using var resp = await _http.PostAsJsonAsync(new Uri(ApiBase, path), body, ct);
-        if (!resp.IsSuccessStatusCode)
-            Log($"发送失败 HTTP {(int)resp.StatusCode}: {await resp.Content.ReadAsStringAsync(ct)}");
+            if (!passive || msgId is null) return;
+            seq = NextReplySeq(msgId);
+            if (seq <= MaxPassiveReplies) return;
+            Log($"[发送] msg_id={msgId} 被动回复次数超限（{MaxPassiveReplies} 次），降级主动消息");
+            passive = false;
+            msgId = null;
+        }
+
+        if (passive) AllocatePassiveSeq();
+        else
+        {
+            Log(chatType == ChatType.Group
+                ? "[发送] 主动群消息（需群主在 QQ 中开启「机器人主动在群聊内发言」）"
+                : "[发送] 主动私聊消息（用户可在 QQ 中关闭主动消息）");
+        }
+
+        // 官方 Bot 的 Markdown 渲染：把【标题】/裸标题转成 ##，并去掉中文大括号。
+        // 纯文本回退仍用原文，避免把 ## 当作普通文字发出去。
+        var markdownText = markdown ? QqMarkdownFormatter.Format(text) : text;
+        var useMarkdown = markdown;
+        var result = await PostMessageAsync(uri, useMarkdown ? markdownText : text,
+            msgId, passive ? seq : null, useMarkdown, ct);
+
+        // Markdown 无权限/语法不被接受 → 纯文本重试（必须换 msg_seq，避免被平台去重）
+        if (!result.Ok && useMarkdown && IsMarkdownError(result))
+        {
+            Log($"[发送] Markdown 被平台拒绝（{result.ErrorCode?.ToString() ?? "unknown"}），回退纯文本");
+            useMarkdown = false;
+            if (passive) AllocatePassiveSeq();
+            result = await PostMessageAsync(uri, text, msgId, passive ? seq : null, false, ct);
+        }
+
+        // 被动回复窗口过期/次数超限 → 主动消息兜底（群聊需群主开启主动发言）
+        if (!result.Ok && passive && result.ErrorCode == 40034128)
+        {
+            Log("[发送] 被动回复窗口已过期，尝试主动消息（可能被平台或用户设置拒绝）");
+            passive = false;
+            msgId = null;
+            useMarkdown = markdown;
+            result = await PostMessageAsync(uri, useMarkdown ? markdownText : text, null, null, useMarkdown, ct);
+            if (!result.Ok && useMarkdown && IsMarkdownError(result))
+                result = await PostMessageAsync(uri, text, null, null, false, ct);
+        }
+
+        if (result.Ok) return true;
+
+        Log($"[发送] 失败 HTTP {result.Status}: {result.Body}{FriendlyHint(result.ErrorCode, chatType)}");
+        return false;
     }
 
-    public async ValueTask DisposeAsync() { await StopAsync(); _http.Dispose(); }
+    private int NextReplySeq(string msgId)
+    {
+        if (_replyCount.Count > 2048) _replyCount.Clear(); // 防止长跑后无限增长
+        return _replyCount.AddOrUpdate(msgId, 1, (_, n) => n + 1);
+    }
+
+    /// <summary>平台可能重复推送同一 msg_id（官方文档明确提示），这里做有界去重，避免同一问题回复两次。</summary>
+    private bool MarkSeen(string messageId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (!_seenMessages.TryAdd(messageId, now)) return false;
+        if (_seenMessages.Count <= 4096) return true;
+
+        // 超过上限时先清掉 10 分钟前的记录；仍超限就整体清空（被动回复窗口只有 5 分钟）
+        foreach (var (id, seenAt) in _seenMessages.ToArray())
+        {
+            if (now - seenAt > TimeSpan.FromMinutes(10))
+                _seenMessages.TryRemove(id, out _);
+        }
+        if (_seenMessages.Count > 4096) _seenMessages.Clear();
+        return true;
+    }
+
+    private async Task<SendResult> PostMessageAsync(Uri uri, string text, string? msgId, int? seq,
+        bool markdown, CancellationToken ct)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["msg_type"] = markdown ? 2 : 0,
+        };
+        if (markdown) body["markdown"] = new { content = text };
+        else body["content"] = text;
+        if (msgId is not null)
+        {
+            body["msg_id"] = msgId;
+            body["msg_seq"] = seq ?? 1;
+        }
+
+        try
+        {
+            // 发送 API 必须带 Authorization: QQBot <access_token>；token 快过期时先刷新
+            await RefreshTokenAsync(ct);
+            using var req = new HttpRequestMessage(HttpMethod.Post, uri)
+            {
+                Content = JsonContent.Create(body),
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("QQBot", _accessToken);
+            req.Headers.TryAddWithoutValidation("X-Union-Appid", _config.AppId);
+
+            using var resp = await _http.SendAsync(req, ct);
+            var raw = await resp.Content.ReadAsStringAsync(ct);
+            return resp.IsSuccessStatusCode
+                ? new SendResult(true, (int)resp.StatusCode, raw, null)
+                : new SendResult(false, (int)resp.StatusCode, raw, ParseErrorCode(raw));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 网络错误/超时：交给上层统一记录，避免异常冒到 Agent 消息泵
+            return new SendResult(false, 0, ex.Message, null);
+        }
+    }
+
+    private static bool IsMarkdownError(SendResult result) =>
+        result.ErrorCode is 40034011 or 40034124 or 40034127
+        || result.Body.Contains("markdown", StringComparison.OrdinalIgnoreCase);
+
+    private static int? ParseErrorCode(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            foreach (var name in new[] { "code", "err_code", "error_code" })
+            {
+                if (!doc.RootElement.TryGetProperty(name, out var el)) continue;
+                if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var number)) return number;
+                if (el.ValueKind == JsonValueKind.String && int.TryParse(el.GetString(), out number)) return number;
+            }
+        }
+        catch (JsonException)
+        {
+            // 非 JSON 错误体：保留原文给日志
+        }
+        return null;
+    }
+
+    private static string FriendlyHint(int? code, ChatType chatType) => code switch
+    {
+        40034100 => "（主动消息触发频控，请降低频率或等待配额恢复）",
+        40034105 => chatType == ChatType.Group
+            ? "（没有主动消息权限：请群主在 QQ 群设置中开启「机器人主动在群聊内发言」）"
+            : "（没有主动消息权限：用户可能关闭了机器人主动消息）",
+        40034127 => "（没有 Markdown 权限：可在频道配置里关闭 Markdown 后重试）",
+        40034011 or 40034124 => "（Markdown 内容不被平台接受，已尝试纯文本回退）",
+        40034128 => chatType == ChatType.Group
+            ? "（被动回复已过期或超过 5 次；降级主动消息需群主开启「机器人主动在群聊内发言」）"
+            : "（被动回复已过期或超过 5 次）",
+        40034101 or 40054003 => "（机器人不在该群，请先把机器人拉进群）",
+        40054013 => "（用户拒收主动消息）",
+        _ => "",
+    };
+
+    private readonly record struct SendResult(bool Ok, int Status, string Body, int? ErrorCode);
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync();
+        if (_ownsHttp) _http.Dispose();
+    }
 
     private async Task RunWsAsync(string gatewayUrl, CancellationToken ct)
     {
@@ -153,7 +337,7 @@ public sealed class OfficialBotConnection : IBotConnection
                 d = new
                 {
                     token = $"QQBot {_accessToken}",
-                    intents = 1 << 25, // GROUP_AND_C2C_EVENT：群@消息 + 单聊
+                    intents = 1 << 25, // GROUP_AND_C2C_EVENT：群@消息 + 群全量消息（如已开启）+ 单聊
                     shard = new[] { 0, 1 },
                     properties = new Dictionary<string, string>
                     {
@@ -207,15 +391,29 @@ public sealed class OfficialBotConnection : IBotConnection
                 var type = t.GetString();
                 if (type == "READY")
                 {
-                    _sessionId = payload.GetProperty("d").GetProperty("session_id").GetString();
-                    Log($"鉴权成功，session={_sessionId?[..Math.Min(8, _sessionId.Length)]}…");
+                    var ready = payload.GetProperty("d");
+                    _sessionId = ready.GetProperty("session_id").GetString();
+                    // 记录机器人自己的 openid：群全量消息里用它判断是否 @ 了机器人
+                    if (ready.TryGetProperty("user", out var self) &&
+                        self.TryGetProperty("id", out var selfId))
+                        _selfOpenId = selfId.GetString();
+                    Log($"鉴权成功，session={_sessionId?[..Math.Min(8, _sessionId.Length)]}…" +
+                        (_selfOpenId is null ? "" : $"，self={_selfOpenId[..Math.Min(8, _selfOpenId.Length)]}…"));
                 }
-                else if (type is "GROUP_AT_MESSAGE_CREATE" or "C2C_MESSAGE_CREATE")
+                else if (type is "GROUP_AT_MESSAGE_CREATE" or "GROUP_MESSAGE_CREATE" or "C2C_MESSAGE_CREATE")
                 {
-                    var msg = ParseEvent(payload, type == "GROUP_AT_MESSAGE_CREATE");
-                    if (msg is not null)
+                    var isGroup = type is not "C2C_MESSAGE_CREATE";
+                    // GROUP_MESSAGE_CREATE 是群全量消息，只有用户 @ 机器人才会走 GROUP_AT_MESSAGE_CREATE；
+                    // 全量消息作为上下文记录，不默认触发回复（除非命中关键词规则）。
+                    var mentioned = type is "GROUP_AT_MESSAGE_CREATE";
+                    var msg = ParseEvent(payload, isGroup, mentioned);
+                    // 按「事件类型 + 消息 ID」去重：同一条消息若同时以全量/AT 两种事件到达，两者都保留；
+                    // 同一事件的重复推送才丢弃（官方文档明确提示可能重复）。
+                    if (msg is not null && MarkSeen($"{type}:{msg.MessageId}"))
                     {
-                        Log($"[收到] {msg.ChatType}:{msg.SenderId}: {msg.Text[..Math.Min(60, msg.Text.Length)]}");
+                        // 全量群消息可能很频繁，只在 @ / 单聊时打印收信日志
+                        if (type is not "GROUP_MESSAGE_CREATE")
+                            Log($"[收到] {msg.ChatType}:{msg.SenderId}: {msg.Text[..Math.Min(60, msg.Text.Length)]}");
                         MessageReceived?.Invoke(this, new MessageReceivedEventArgs(msg));
                     }
                 }
@@ -237,18 +435,36 @@ public sealed class OfficialBotConnection : IBotConnection
         }
     }
 
-    private BotMessage? ParseEvent(JsonElement payload, bool isGroup)
+    /// <summary>把官方 Bot 的 MESSAGE_CREATE 事件解析成统一消息（public 便于协议层单测）。</summary>
+    public BotMessage? ParseEvent(JsonElement payload, bool isGroup, bool mentionedMe = true)
     {
         var d = payload.GetProperty("d");
         var content = d.TryGetProperty("content", out var c) ? c.GetString()?.Trim() : null;
         var attachments = ParseAttachments(d);
         if (string.IsNullOrEmpty(content) && attachments.Count == 0) return null;
+
+        // 群全量模式下平台可能只发 GROUP_MESSAGE_CREATE；判断正文里的 <@...> 是否是机器人。
+        if (isGroup && !mentionedMe && MentionsSelf(d, content, _selfOpenId))
+            mentionedMe = true;
+
+        var author = d.TryGetProperty("author", out var a) ? a : (JsonElement?)null;
+        // 防止机器人自己（或其它机器人）的消息进入循环；全量群消息模式下尤其重要。
+        if (author?.TryGetProperty("bot", out var botEl) == true && botEl.ValueKind == JsonValueKind.True)
+            return null;
         var chatId = isGroup
             ? d.TryGetProperty("group_openid", out var g) ? g.GetString() : null
-            : d.TryGetProperty("openid", out var o) ? o.GetString() : null;
+            : (d.TryGetProperty("openid", out var o) ? o.GetString() : null)
+              ?? (author?.TryGetProperty("user_openid", out var userOpenId) == true ? userOpenId.GetString() : null)
+              ?? (author?.TryGetProperty("id", out var authorId) == true ? authorId.GetString() : null);
         if (chatId is null) return null;
-        var author = d.TryGetProperty("author", out var a) ? a : (JsonElement?)null;
-        var messageId = payload.TryGetProperty("id", out var id) ? id.GetString() : null;
+        // 被动回复的 msg_id 来自事件体 d.id；兼容外层 id（部分网关会把消息 id 放在顶层）
+        var messageId = (d.TryGetProperty("id", out var innerId) ? innerId.GetString() : null)
+            ?? (payload.TryGetProperty("id", out var outerId) ? outerId.GetString() : null);
+        var senderName = author?.TryGetProperty("username", out var un) == true ? un.GetString() ?? "" : "";
+        var timestamp = d.TryGetProperty("timestamp", out var tsEl) && tsEl.ValueKind == JsonValueKind.String
+                        && DateTimeOffset.TryParse(tsEl.GetString(), out var parsed)
+            ? parsed
+            : DateTimeOffset.Now;
 
         return new BotMessage
         {
@@ -256,14 +472,63 @@ public sealed class OfficialBotConnection : IBotConnection
             ChatId = chatId,
             ChatType = isGroup ? ChatType.Group : ChatType.Private,
             SenderId = author?.TryGetProperty("member_openid", out var mo) == true ? mo.GetString() ?? "" :
+                       author?.TryGetProperty("user_openid", out var uo) == true ? uo.GetString() ?? "" :
                        author?.TryGetProperty("id", out var uid) == true ? uid.GetString() ?? "" : "",
-            SenderName = "",
+            SenderName = senderName,
             Text = content ?? "",
-            MentionedMe = isGroup, // GROUP_AT_MESSAGE_CREATE 天然是 @ 机器人
-            Timestamp = DateTimeOffset.Now,
+            MentionedMe = mentionedMe, // GROUP_AT_MESSAGE_CREATE 天然是 @ 机器人；全量群消息为 false
+            Timestamp = timestamp,
             RawJson = payload.GetRawText(),
             Attachments = attachments.Count > 0 ? attachments : null,
         };
+    }
+
+    private static readonly Regex MentionPattern = new(
+        @"<@!?([A-Za-z0-9_\-]+)>", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 判断群消息正文是否 @ 了机器人。官方约定 <c>mentions</c> 不包含机器人自身，
+    /// 所以「正文里的 &lt;@id&gt;」减去「mentions 里的其他用户」后还有剩余，就是 @ 了机器人。
+    /// READY 里的 self openid 能直接匹配时优先使用（群成员 openid 可能与 self 不同）。
+    /// </summary>
+    private static bool MentionsSelf(JsonElement d, string? content, string? selfOpenId)
+    {
+        // 全量群消息的 mentions 里可能带 is_you=true（平台权威标记），优先采用。
+        if (d.TryGetProperty("mentions", out var authoritative) &&
+            authoritative.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var m in authoritative.EnumerateArray())
+            {
+                if (m.TryGetProperty("is_you", out var you) && you.ValueKind == JsonValueKind.True)
+                    return true;
+            }
+        }
+
+        if (string.IsNullOrEmpty(content)) return false;
+        if (!string.IsNullOrEmpty(selfOpenId) &&
+            (content.Contains($"<@{selfOpenId}>", StringComparison.Ordinal) ||
+             content.Contains($"<@!{selfOpenId}>", StringComparison.Ordinal)))
+            return true;
+
+        var mentioned = MentionPattern.Matches(content)
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (mentioned.Count == 0) return false;
+
+        if (d.TryGetProperty("mentions", out var mentions) && mentions.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var m in mentions.EnumerateArray())
+            {
+                foreach (var name in new[] { "id", "member_openid", "user_openid" })
+                {
+                    if (m.TryGetProperty(name, out var idEl) && idEl.ValueKind == JsonValueKind.String)
+                        mentioned.Remove(idEl.GetString() ?? "");
+                }
+            }
+        }
+
+        // 剩下的一定是没有出现在 mentions 里的被 @ 对象；官方语境下就是机器人
+        return mentioned.Count > 0;
     }
 
     /// <summary>解析官方 Bot 消息附件（attachments[]：filename/url/size/content_type；url 有效期约 10 分钟需尽快下载）。</summary>

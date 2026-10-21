@@ -28,7 +28,7 @@ public sealed class AgentRuntime(
 
     public SessionManager Sessions => sessions;
 
-    public async Task OnMessageAsync(IBotConnectionFactory factory, BotMessage message, CancellationToken ct = default)
+    public async Task OnMessageAsync(IMessageSender factory, BotMessage message, CancellationToken ct = default)
     {
         RuntimeLog?.Invoke(this, $"[{message.ChatType}:{message.ChatId}] {message.SenderName}: {message.Text}");
 
@@ -76,11 +76,11 @@ public sealed class AgentRuntime(
             if (IsLogAnalysisRequest(message.Text, out var logText))
             {
                 RuntimeLog?.Invoke(this, "命中日志分析，交给 LogAnalysisAgent");
-                reply = await logAgent.AnalyzeAsync(logText, ct);
+                reply = await logAgent.AnalyzeAsync(logText, message.SupportsMarkdown, ct);
             }
             else
             {
-                reply = await groupAgent.ReplyAsync(message, context, ct);
+                reply = await groupAgent.ReplyAsync(message, context, message.SupportsMarkdown, ct);
             }
             sessions.OnAgentReply(message, reply, modelUsed: null);
             RuntimeLog?.Invoke(this, $"回复: {reply[..Math.Min(80, reply.Length)]}");
@@ -117,6 +117,9 @@ public sealed class AgentRuntime(
                 Timestamp = message.Timestamp,
                 RawJson = message.RawJson,
                 Attachments = message.Attachments,
+                ChannelId = message.ChannelId,
+                ChannelName = message.ChannelName,
+                SupportsMarkdown = message.SupportsMarkdown,
             };
         }
         catch (Exception ex)
@@ -163,19 +166,19 @@ public sealed class AgentRuntime(
 
     /// <summary>
     /// 回复发送策略（柠枺要求：合并发送 + 分节格式化）：
-    /// ① 文本含 ≥2 个【标题】分节 → 合并转发卡片（OneBot），一个卡片承载"原因/方法/建议"各节；
-    /// ② 无分节但超长 → 按行切块后合并转发；
-    /// ③ 通道不支持转发（官方 Bot/本机对话各自的实现决定）→ 短文直发、长文回退分段。
+    /// ① 文本含 ≥2 个【标题】分节 → 合并发送（OneBot 发转发卡片；官方 Bot 合并成一条 Markdown/文本）；
+    /// ② 无分节但超长 → 按行切块后交给同一合并入口；
+    /// ③ 通道既不支持转发也不支持合并（本机对话/超长）→ 短文直发、长文回退分段。
     /// </summary>
-    private static async Task SendReplyAsync(IBotConnectionFactory factory, BotMessage message, string text, CancellationToken ct)
+    private static async Task SendReplyAsync(IMessageSender factory, BotMessage message, string text, CancellationToken ct)
     {
         var sections = SplitSections(text);
         if (sections.Count >= 2 &&
-            await factory.TrySendForwardAsync(message.ChatId, message.ChatType, sections, ct))
+            await factory.TrySendForwardAsync(message.ChatId, message.ChatType, sections, message.MessageId, ct))
             return;
 
         if (text.Length > SegmentLength &&
-            await factory.TrySendForwardAsync(message.ChatId, message.ChatType, ChunkForForward(text), ct))
+            await factory.TrySendForwardAsync(message.ChatId, message.ChatType, ChunkForForward(text), message.MessageId, ct))
             return;
 
         if (text.Length <= SegmentLength)
@@ -197,7 +200,7 @@ public sealed class AgentRuntime(
     /// 分节标题：行首【标题】（后接正文），或独立成行的常用裸标题（部分模型不守括号格式）。
     /// </summary>
     private static readonly Regex SectionHeaderPattern = new(
-        @"^(?:【[^】]{1,14}】.*|(?:结论|最终结论|原因分析|可能原因|根因分析|根因|解决方法|解决方案|修复方法|修复步骤|相关建议|建议|需要补充|补充信息|总结)\s*)$",
+        @"^(?:【[^】]{1,14}】.*|##[ \t]+[^\r\n]{1,50}|(?:结论|最终结论|原因分析|可能原因|根因分析|根因|解决方法|解决方案|修复方法|修复步骤|相关建议|建议|需要补充|补充信息|总结)\s*)$",
         RegexOptions.Multiline | RegexOptions.Compiled);
 
     /// <summary>
@@ -218,7 +221,11 @@ public sealed class AgentRuntime(
             var end = i + 1 < matches.Count ? matches[i + 1].Index : text.Length;
             var body = text[start..end].Trim();
             if (body.Length == 0) continue;
-            if (!body.StartsWith("【"))
+            if (body.StartsWith("## ", StringComparison.Ordinal))
+            {
+                // 官方 Bot 的 Markdown 标题保持原样
+            }
+            else if (!body.StartsWith("【", StringComparison.Ordinal))
             {
                 // 裸标题行 → 规范化为【标题】，卡片各页样式统一
                 var nl = body.IndexOf('\n');

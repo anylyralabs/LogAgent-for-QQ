@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using LogAgent.App.Services;
 using LogAgent.Connections;
 using LogAgent.Shared.Configuration;
+using LogAgent.Shared.Messaging;
 using QRCoder;
 
 namespace LogAgent.App.Pages;
@@ -39,11 +40,15 @@ public partial class OfficialBotPage : Page
 
     private void LoadConfig()
     {
-        var config = AppConfigStore.Load().OfficialBot;
+        var appConfig = AppConfigStore.Load();
+        var channel = appConfig.FindChannel(ChannelTransport.Official);
+        var config = appConfig.EffectiveOfficialBot();
         AppIdBox.Text = config.AppId;
         SecretBox.Password = config.AppSecret;
         SandboxCheck.IsChecked = config.Sandbox;
         EnabledCheck.IsChecked = config.Enabled;
+        MarkdownCheck.IsChecked = channel?.MarkdownSupport ?? true;
+        MergeCheck.IsChecked = channel?.MergeMessages ?? true;
     }
 
     private void UpdateStatus()
@@ -174,10 +179,12 @@ public partial class OfficialBotPage : Page
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         var config = AppConfigStore.Load();
-        config.OfficialBot.AppId = AppIdBox.Text.Trim();
-        config.OfficialBot.AppSecret = SecretBox.Password;
-        config.OfficialBot.Sandbox = SandboxCheck.IsChecked == true;
-        config.OfficialBot.Enabled = EnabledCheck.IsChecked == true;
+        // 必须拿真实频道对象再改；EffectiveOfficialBot() 是只读快照，改它不会落盘。
+        var channel = config.GetOrAddChannel(ChannelTransport.Official);
+        channel.SetOfficialCredentials(AppIdBox.Text, SecretBox.Password, SandboxCheck.IsChecked == true);
+        channel.Enabled = EnabledCheck.IsChecked == true;
+        channel.MarkdownSupport = MarkdownCheck.IsChecked == true;
+        channel.MergeMessages = MergeCheck.IsChecked == true;
         AppConfigStore.Save(config);
         SaveHint.Text = "已保存 ✅";
     }
@@ -189,7 +196,9 @@ public partial class OfficialBotPage : Page
         try
         {
             // 启动后状态由定时器持续刷新（WS 后台握手需要几秒）
-            await AppHost.StartOfficialBotAsync();
+            var result = await AppHost.StartOfficialBotAsync();
+            if (result is not ("已连接" or "官方 Bot 已在运行"))
+                MessageBox.Show(result, "官方 Bot", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
@@ -205,5 +214,34 @@ public partial class OfficialBotPage : Page
     {
         await AppHost.StopOfficialBotAsync();
         UpdateStatus();
+    }
+
+    private async void SendProactive_Click(object sender, RoutedEventArgs e)
+    {
+        var target = ProactiveTargetBox.Text.Trim();
+        var text = ProactiveTextBox.Text.Trim();
+        if (target.Length == 0 || text.Length == 0)
+        {
+            ProactiveStatus.Text = "请填写目标 openid 和消息内容";
+            return;
+        }
+
+        var official = AppConfigStore.Load().FindChannel(ChannelTransport.Official);
+        if (official is null)
+        {
+            ProactiveStatus.Text = "请先在上方保存官方 Bot 凭证";
+            return;
+        }
+
+        var chatType = ProactiveTypeBox.SelectedIndex == 1 ? ChatType.Private : ChatType.Group;
+        ProactiveStatus.Text = "发送中…";
+        try
+        {
+            ProactiveStatus.Text = await AppHost.SendProactiveAsync(target, chatType, text, official.Id);
+        }
+        catch (Exception ex)
+        {
+            ProactiveStatus.Text = $"发送失败：{ex.Message}";
+        }
     }
 }

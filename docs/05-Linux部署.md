@@ -14,7 +14,7 @@
 | 桌面壳（Windows） | 完整体验（含托盘 / 向导 / 全部页面） | `LogAgent.App`（WPF） |
 
 Linux 上没有 WPF 桌面壳：管理通过配置向导的等价流程（编辑 `config.json` + `doctor` 自检）与 CLI 完成。
-QQ 接入有两条：**NapCat 反向 WS**（功能最全，含合并转发卡片）或 **QQ 官方 Bot**（合规，无合并转发）。
+QQ 接入有两条：**QQ 官方 Bot**（推荐/优先，支持 Markdown、合并消息与主动消息）或 **NapCat 反向 WS**（功能最全，含合并转发卡片）。两者可同时启用，官方 Bot 默认优先级更高。
 
 ## 2. 环境要求
 
@@ -23,7 +23,7 @@ QQ 接入有两条：**NapCat 反向 WS**（功能最全，含合并转发卡片
 | 操作系统 | Linux x64 / arm64（glibc 2.17+，如 Debian 12、Ubuntu 22.04+、CentOS 9） |
 | .NET | 构建需 .NET 10 SDK；发布产物自包含运行时 |
 | Shell | `/bin/sh`（运行 `run_shell` 沙箱；可用 `LOGAGENT_SHELL` 指定 bash） |
-| QQ 接入 | NapCat（Docker 或本机脚本）或 QQ 官方 Bot 凭证 |
+| QQ 接入 | QQ 官方 Bot 凭证（优先）；可选 NapCat（Docker 或本机脚本） |
 | 可选 | `grep`/`sed`/`awk`/`find`/`python3`（沙箱白名单默认命令，缺哪个模型就用不了哪个） |
 
 ## 3. 从源码构建
@@ -77,17 +77,39 @@ ARM 服务器把 `-r linux-x64` 换成 `-r linux-arm64`。
     { "TaskType": "Summary", "ProviderChain": ["my-model"] },
     { "TaskType": "Embedding", "ProviderChain": ["my-model"] }
   ],
-  "OneBot11": {
-    "Enabled": true,
-    "Host": "127.0.0.1",
-    "Port": 6701,
-    "Path": "/onebot/v11/ws",
-    "Token": ""
-  },
+  "Channels": [
+    {
+      "Id": "qq-official",
+      "Type": "qq",
+      "Name": "QQ 官方 Bot",
+      "Transport": "official",
+      "Enabled": true,
+      "Priority": 100,
+      "AppId": "<AppID>",
+      "AppSecret": "<AppSecret>",
+      "MarkdownSupport": true,
+      "MergeMessages": true
+    },
+    {
+      "Id": "qq-onebot",
+      "Type": "qq",
+      "Name": "QQ（NapCat / OneBot11）",
+      "Transport": "onebot11",
+      "Enabled": false,
+      "Priority": 50,
+      "OneBot11": {
+        "Host": "127.0.0.1",
+        "Port": 6701,
+        "Path": "/onebot/v11/ws",
+        "Token": ""
+      }
+    }
+  ],
   "AutoStartBots": true
 }
 ```
 
+> 官方 Bot 与 OneBot11 可二选一，也可同时启用；官方 Bot 默认优先级 100，先启动、优先主动发送。
 > 一份 key 同时承担 Chat / LogAnalysis / DeepReasoning / Summary / Embedding；Embedding 可单独指向支持 `/embeddings` 的 provider。
 
 ### 4.3 沙箱白名单（Linux 默认）
@@ -108,7 +130,7 @@ grep sed awk sort uniq wc head tail cut find xargs cat ls stat file echo python3
 
 用 `config repair-sandbox` 显式修复（会把原配置备份成 `config.json.bak-<时间戳>`）。
 
-## 5. NapCat 接入（任选其一）
+## 5. NapCat 接入（可选，官方 Bot 之外的备用通道）
 
 ### 5.1 NapCat 跑在 Docker（推荐）
 
@@ -123,7 +145,7 @@ docker run -d --name napcat \
 
 ```
 URL:   ws://<日志机 IP>:6701/onebot/v11/ws
-Token: 与 config.json 的 OneBot11.Token 一致（留空则两边都空）
+Token: 与 config.json 的 Channels[qq-onebot].OneBot11.Token 一致（留空则两边都空）
 ```
 
 ### 5.2 NapCat 跑在同一台机器（脚本托管）
@@ -154,9 +176,22 @@ Token: 与 config.json 的 OneBot11.Token 一致（留空则两边都空）
 ```
 
 `serve` 行为：
-- 按 `config.json` 的 `OneBot11.Enabled` / `OfficialBot.Enabled` 自动连接；
-- 任一通道启动失败只记录错误，不会让进程退出（其余通道继续可用）；
-- 收到 `SIGTERM` / `SIGINT` 时：先切段所有活跃会话（保住 L1 摘要），再断开连接，退出码 0。
+- 按 `config.json` 的 `Channels[].Enabled` 自动连接，官方 Bot（Priority 100）先于 OneBot11（50）；
+- 任一频道启动失败只记录错误，不会让进程退出（其余频道继续可用）；
+- 收到 `SIGTERM` / `SIGINT` 时：先停频道（放出合并窗口里的消息），再切段会话，退出码 0。
+
+主动推送（适合 cron / 定时任务）：
+
+```bash
+# 群聊主动消息：群主需在 QQ 群设置中开启「机器人主动在群聊内发言」
+./publish/linux-x64/LogAgent.Headless send group <group_openid> "今晚 22:00 维护"
+
+# 单聊主动消息：受用户主动消息开关与平台频控限制
+./publish/linux-x64/LogAgent.Headless send private <user_openid> "提醒：日志已分析完"
+
+# 指定频道（默认选优先级最高的启用频道）
+./publish/linux-x64/LogAgent.Headless send group <group_openid> "公告" --channel qq-official
+```
 
 ## 7. systemd
 
@@ -208,7 +243,8 @@ Linux 默认白名单不含 `findstr`/`type`/`dir`。检查 `config.json` 里的
 换官方 `mcr.microsoft.com/dotnet/runtime` 镜像即可恢复 FTS。
 
 **Q4：合并转发卡片没有出现？**
-合并转发只在 OneBot11（NapCat）通道生效；官方 Bot 通道按普通消息发送。回复需含 ≥2 个【分节】标题。
+合并转发卡片只在 OneBot11（NapCat）通道生效；官方 Bot 通道会把分节合并成一条 Markdown/文本消息发送（不再发卡片）。
+回复需含 ≥2 个【分节】标题。
 
 **Q5：模型端点在内网 / 需要代理？**
 `Providers[].Endpoint` 支持任意 OpenAI 兼容地址；网络代理用 systemd `Environment=HTTPS_PROXY=…` 或容器环境变量。

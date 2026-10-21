@@ -2,27 +2,25 @@ using Avalonia.Threading;
 using LogAgent.Connections;
 using LogAgent.Core;
 using LogAgent.Shared.Configuration;
-using LogAgent.Shared.Messaging;
 using LogAgent.Shared.Platform;
 
 namespace LogAgent.Desktop.ViewModels;
 
 /// <summary>
 /// 桌面壳组合根视图模型：持有 <see cref="AgentHost"/>（与 WPF 壳同一套运行时）、
-/// OneBot11 连接、日志缓冲与各页面的子视图模型。
+/// 频道管理器、日志缓冲与各页面的子视图模型。
 /// 页面切换只切 CurrentPage，运行时不重建（等价于 WPF 壳的 AppHost 单例语义）。
 /// </summary>
 public sealed class ShellViewModel : ObservableObject
 {
     private readonly AgentHost _host;
     private readonly List<string> _logBuffer = [];
-    private OneBot11Connection? _oneBot;
-    private OfficialBotConnection? _officialBot;
+    private ChannelManager? _channels;
+    private string? _channelFingerprint;
     private object? _currentPage;
     private string _pageTitle = "仪表盘";
     private string _status = "";
     private string _connectionState = "未启动";
-    private bool _oneBotRunning;
 
     public ShellViewModel()
     {
@@ -38,12 +36,9 @@ public sealed class ShellViewModel : ObservableObject
         Settings = new SettingsViewModel(this);
 
         CurrentPage = Dashboard;
-        StartOneBotCommand = new RelayCommand(StartOneBotAsync, () => !_oneBotRunning);
-        StopOneBotCommand = new RelayCommand(StopOneBotAsync, () => _oneBotRunning);
-        // 按当前配置初始化状态栏文案（未启动连接时的可读提示）
-        ConnectionState = Config.OneBot11.Enabled
-            ? $"OneBot11 未启动（配置端口 {Config.OneBot11.Port}）"
-            : "OneBot11 未启用（配置文件里 OneBot11.Enabled = false）";
+        StartOneBotCommand = new RelayCommand(StartOneBotAsync, () => !IsOneBotRunning);
+        StopOneBotCommand = new RelayCommand(StopOneBotAsync, () => IsOneBotRunning);
+        ConnectionState = DescribeIdleChannels(Config);
         EnsureRuntime();
 
         _ = Task.Run(async () =>
@@ -82,7 +77,7 @@ public sealed class ShellViewModel : ObservableObject
 
     public string Status { get => _status; private set => Set(ref _status, value); }
 
-    /// <summary>连接状态（仪表盘与侧栏共用）。</summary>
+    /// <summary>连接状态（仪表盘与侧栏共用）：逐频道展示，官方 Bot 在前。</summary>
     public string ConnectionState { get => _connectionState; private set => Set(ref _connectionState, value); }
 
     public RelayCommand StartOneBotCommand { get; }
@@ -92,6 +87,9 @@ public sealed class ShellViewModel : ObservableObject
     public IReadOnlyList<string> RecentLogs => _logBuffer;
 
     public event Action<ChatMessage>? LocalReplied;
+
+    private bool IsOneBotRunning =>
+        _channels?.Channels.Any(c => c.Config.IsOneBot11 && c.Running) == true;
 
     // ─────────────────────────── 导航 ───────────────────────────
 
@@ -118,7 +116,7 @@ public sealed class ShellViewModel : ObservableObject
         CurrentPage = page;
     }
 
-    // ─────────────────────────── 运行时 / 连接 ───────────────────────────
+    // ─────────────────────────── 运行时 / 频道 ───────────────────────────
 
     private void EnsureRuntime()
     {
@@ -133,51 +131,44 @@ public sealed class ShellViewModel : ObservableObject
         }
     }
 
+    /// <summary>按频道优先级启动所有启用频道（官方 Bot 优先）。</summary>
     public async Task AutoConnectAsync()
     {
         Config = AppConfigStore.Load();
-        if (Config.OneBot11.Enabled && !_oneBotRunning)
-            await StartOneBotAsync();
-        if (Config.OfficialBot.Enabled && _officialBot is null)
+        try
         {
-            try
-            {
-                await StartOfficialBotAsync();
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"[官方Bot] 连接失败：{ex.Message}");
-            }
+            var manager = await EnsureChannelsAsync(Config);
+            await manager.StartAllAsync();
         }
+        catch (Exception ex)
+        {
+            AppendLog($"[频道] 自动连接失败：{ex.Message}");
+        }
+        UpdateConnectionState();
     }
 
     public async Task StartOneBotAsync()
     {
-        if (_oneBotRunning) return;
+        if (IsOneBotRunning) return;
         Config = AppConfigStore.Load();
         EnsureRuntime();
+        var channel = Config.FindChannel(ChannelTransport.OneBot11);
+        if (channel is null)
+        {
+            ConnectionState = "未配置 OneBot11 频道";
+            AppendLog("[OneBot11] 未配置频道，请先在配置里添加");
+            return;
+        }
+
         try
         {
-            var connection = new OneBot11Connection(Config.OneBot11);
-            connection.ConnectionLog += (_, line) => AppendLog(line);
-            connection.MessageReceived += async (_, e) =>
+            var manager = await EnsureChannelsAsync(Config);
+            if (!await manager.StartAsync(channel.Id))
             {
-                try
-                {
-                    if (_host.Runtime is { } runtime)
-                        await runtime.OnMessageAsync(new Bridge(() => _oneBot, () => _officialBot), e.Message);
-                }
-                catch (Exception ex)
-                {
-                    AppendLog($"[Runtime] 处理消息失败：{ex.Message}");
-                }
-            };
-            await connection.StartAsync();
-            _oneBot = connection;
-            _oneBotRunning = true;
-            ConnectionState = $"OneBot11 监听 {Config.OneBot11.Host}:{Config.OneBot11.Port}（等待 NapCat 连入）";
-            StartOneBotCommand.RaiseCanExecuteChanged();
-            StopOneBotCommand.RaiseCanExecuteChanged();
+                ConnectionState = $"OneBot11 启动失败：{manager.Find(channel.Id)?.LastError}";
+                return;
+            }
+            UpdateConnectionState();
         }
         catch (Exception ex)
         {
@@ -188,52 +179,74 @@ public sealed class ShellViewModel : ObservableObject
 
     public async Task StopOneBotAsync()
     {
-        if (_oneBot is not null)
+        if (_channels is not null)
         {
             await _host.CutAllSessionsAsync("shutdown");
-            await _oneBot.StopAsync();
-            await _oneBot.DisposeAsync();
-            _oneBot = null;
+            var channel = Config.FindChannel(ChannelTransport.OneBot11);
+            if (channel is not null) await _channels.StopAsync(channel.Id);
         }
-        _oneBotRunning = false;
-        ConnectionState = "未启动";
-        StartOneBotCommand.RaiseCanExecuteChanged();
-        StopOneBotCommand.RaiseCanExecuteChanged();
-    }
-
-    private async Task StartOfficialBotAsync()
-    {
-        var config = AppConfigStore.Load().OfficialBot;
-        if (string.IsNullOrWhiteSpace(config.AppId) || string.IsNullOrWhiteSpace(config.AppSecret))
-        {
-            AppendLog("[官方Bot] 未配置 AppID / AppSecret，跳过");
-            return;
-        }
-
-        var bot = new OfficialBotConnection(config);
-        bot.ConnectionLog += (_, line) => AppendLog(line);
-        bot.MessageReceived += async (_, e) =>
-        {
-            try
-            {
-                if (_host.Runtime is { } runtime)
-                    await runtime.OnMessageAsync(new Bridge(() => _oneBot, () => _officialBot), e.Message);
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"[Runtime] 处理消息失败：{ex.Message}");
-            }
-        };
-        EnsureRuntime();
-        await bot.StartAsync();
-        _officialBot = bot;
-        AppendLog("[官方Bot] 已启动");
+        UpdateConnectionState();
     }
 
     public async Task SendLocalChatAsync(string text)
     {
         EnsureRuntime();
         await _host.SendLocalChatAsync(text);
+    }
+
+    // ─────────────────────────── 频道装配 / 状态 ───────────────────────────
+
+    /// <summary>配置发生实质变化时重建频道管理器，保证改完凭证/端口后生效。</summary>
+    private async Task<ChannelManager> EnsureChannelsAsync(AppConfig config)
+    {
+        var channels = config.Channels ?? [];
+        var fingerprint = channels.ChannelFingerprint();
+        if (_channels is not null && _channelFingerprint == fingerprint)
+            return _channels;
+
+        if (_channels is not null)
+        {
+            await _channels.DisposeAsync();
+            _channels = null;
+        }
+
+        var manager = new ChannelManager(channels);
+        manager.Log += (_, line) => AppendLog(line);
+        manager.MessageReceived += OnChannelMessage;
+        _channels = manager;
+        _channelFingerprint = fingerprint;
+        return manager;
+    }
+
+    private async void OnChannelMessage(object? sender, ChannelMessageEventArgs e)
+    {
+        try
+        {
+            if (_host.Runtime is { } runtime && _channels is not null)
+                await runtime.OnMessageAsync(_channels.CreateSender(e.ChannelId), e.Message);
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[Runtime] 处理消息失败：{ex.Message}");
+        }
+    }
+
+    private void UpdateConnectionState()
+    {
+        var statuses = _channels?.Snapshot().Where(s => s.Enabled || s.Running).ToList() ?? [];
+        ConnectionState = statuses.Count > 0
+            ? string.Join(" · ", statuses.Select(s => $"{s.Name}：{s.StateText}"))
+            : DescribeIdleChannels(Config);
+        StartOneBotCommand.RaiseCanExecuteChanged();
+        StopOneBotCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>未启动时的可读提示（只列启用的频道；官方 Bot 自然排在前面）。</summary>
+    private static string DescribeIdleChannels(AppConfig config)
+    {
+        var active = config.ActiveChannels();
+        if (active.Count == 0) return "未启用任何频道（设置 → 频道）";
+        return string.Join(" · ", active.Select(c => $"{c.Name} 未启动"));
     }
 
     // ─────────────────────────── 日志 / 回复 ───────────────────────────
@@ -283,42 +296,14 @@ public sealed class ShellViewModel : ObservableObject
     {
         try
         {
-            await StopOneBotAsync();
+            if (_channels is not null) await _channels.DisposeAsync();
+            await _host.CutAllSessionsAsync("shutdown");
         }
         catch (Exception)
         {
             // 退出路径尽力而为
         }
-        if (_officialBot is not null)
-        {
-            try { await _officialBot.StopAsync(); } catch (Exception) { /* ignore */ }
-            _officialBot = null;
-        }
+        _channels = null;
         await _host.DisposeAsync();
-    }
-
-    /// <summary>把 Agent 回复发回在线通道（OneBot 优先，官方 Bot 兜底）。</summary>
-    private sealed class Bridge(Func<OneBot11Connection?> oneBot, Func<OfficialBotConnection?> official)
-        : IBotConnectionFactory
-    {
-        public async Task SendTextAsync(string chatId, ChatType chatType, string text,
-            string? replyToMessageId, CancellationToken ct = default)
-        {
-            // 优先用「已连入」的通道：OneBot 在监听但 NapCat 未连入时，应回落到官方 Bot
-            if (oneBot() is { IsConnected: true } conn)
-            {
-                await conn.SendTextAsync(chatId, chatType, text, replyToMessageId, ct);
-                return;
-            }
-            if (official() is { IsConnected: true } bot)
-                await bot.SendTextAsync(chatId, chatType, text, replyToMessageId, ct);
-        }
-
-        public async Task<bool> TrySendForwardAsync(string chatId, ChatType chatType,
-            IReadOnlyList<string> sections, CancellationToken ct = default)
-        {
-            if (oneBot() is { IsConnected: true } conn) return await conn.SendForwardAsync(chatId, chatType, sections, ct);
-            return false; // 官方 Bot 无合并转发
-        }
     }
 }

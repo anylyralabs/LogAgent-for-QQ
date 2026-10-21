@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>QqQrLogin</AssemblyName>
+    <RootNamespace>QqQrLogin</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.8.1" />
+    <!-- 复用仓库里已验证的 QQ 绑定协议客户端，但本工具不进入主解决方案/主程序 -->
+    <ProjectReference Include="..\..\src\LogAgent.Connections\LogAgent.Connections.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="index.html" />
+  </ItemGroup>
+
+</Project>

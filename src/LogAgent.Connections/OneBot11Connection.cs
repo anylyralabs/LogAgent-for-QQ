@@ -144,6 +144,11 @@ public sealed class OneBot11Connection : IBotConnection
     /// 一个转发卡片承载多个分节（原因/方法/建议等），点开逐节阅读——长报告不再刷屏。
     /// 失败返回 false，由调用方回退普通发送。
     /// </summary>
+    /// <summary><see cref="IBotConnection"/> 统一入口：OneBot11 原生支持合并转发。</summary>
+    public Task<bool> TrySendForwardAsync(string chatId, ChatType chatType, IReadOnlyList<string> sections,
+        string? replyToMessageId = null, CancellationToken ct = default)
+        => SendForwardAsync(chatId, chatType, sections, ct);
+
     public async Task<bool> SendForwardAsync(string chatId, ChatType chatType, IReadOnlyList<string> sections, CancellationToken ct = default)
     {
         if (sections.Count == 0) return false;

@@ -9,8 +9,9 @@
 - **技术栈**：C# / .NET 10（LTS），xUnit 2.9，SQLite（`Microsoft.Data.Sqlite`），Avalonia 11（跨平台桌面）
 - **两种宿主**：`LogAgent.App`（WPF，Windows 全功能）、`LogAgent.Headless`（无头 CLI/服务，Linux/Windows）
 - **双形态**：桌面壳 + 无头服务，共用 `LogAgent.Core.AgentHost` 运行时
-- **QQ 接入**：NapCat（OneBot11 反向 WS）或 QQ 官方 Bot，二选一
-- **文档**：`docs/` 下 5 篇（规划 / 快速上手 / 分发 / Linux 部署）
+- **QQ 接入**：OpenClaw 风格频道抽象——官方 Bot 优先，NapCat（OneBot11）可并行；两者都能独立启停
+- **文档**：`docs/` 下 7 篇（规划 / 快速上手 / 分发 / Linux 部署 / Android APK / 第三方许可证）
+- **许可证**：`linux` 分支为 **GPLv2**（`main` 历史提交仍按其当时的 MIT）。引入任何第三方二进制前先看 `docs/07-第三方组件与许可证.md`
 
 ## 2. 构建与验证
 
@@ -32,7 +33,7 @@ dotnet run --project src/LogAgent.Headless -- selftest    # 端到端自检，�
 **关键约束**：
 
 - `LogAgent.Desktop`（Avalonia）**不在 `LogAgent.slnx` 内**，必须单独构建。这是刻意设计，避免影响 Windows 主构建路径；不要「顺手」把它加进 slnx。
-- 本机（Android/Termux）**没有 .NET SDK**，无法本地编译。改代码后只能靠 CI 验证；提交前务必做静态自查（见 §5）。
+- 本机（Android/Termux）**没有原生 .NET SDK**，但可以在 proot 容器里编 arm64 产物（见 §9）。Windows/WPF 部分仍需靠 CI 验证；提交前务必做静态自查（见 §5）。
 
 ## 3. 架构要点
 
@@ -79,7 +80,7 @@ LogAgent.App (WPF)  /  LogAgent.Desktop (Avalonia)  /  LogAgent.Headless
 
 ## 5. 提交前自查（无 SDK 时的替代验证）
 
-因本机无法编译，改完代码至少跑一遍静态检查：
+因本机对 Windows/WPF 部分无法编译，改完代码至少跑一遍静态检查（Linux arm64 部分可直接编译，见 §9）：
 
 ```bash
 # 1) 括号平衡
@@ -119,7 +120,9 @@ LogAgent.App (WPF)  /  LogAgent.Desktop (Avalonia)  /  LogAgent.Headless
 
 | 项 | 说明 |
 |---|---|
-| 本地编译 | ❌ 本机无 .NET SDK，验证依赖 CI |
+| 本地编译（Windows / WPF） | ❌ 做不到，验证依赖 CI |
+| 本地编译（Linux arm64 产物） | ✅ **可以**：proot + Ubuntu 24.04 rootfs + .NET SDK 10.0.100，见 `docs/06-Android-APK方案-proroot容器.md` §6.1 |
+| 本地打 Android APK | ✅ **可以**：aapt2 + javac + d8 + apksigner + android.jar，无需 Android SDK |
 | CI 触发 | `main` 与 `linux` 分支；两个工作流：`ci.yml`（构建+测试）、`build-artifacts.yml`（产物） |
 | 产物 | Linux x64/arm64 无头包、Linux 桌面包、Docker 镜像、Windows 桌面 zip |
 | 桌面壳 | 只有 5 个页面（仪表盘/对话/模型路由/日志/设置），其余页面仅在 WPF 壳 |
@@ -135,3 +138,4 @@ LogAgent.App (WPF)  /  LogAgent.Desktop (Avalonia)  /  LogAgent.Headless
 | 加内置工具 | `src/LogAgent.Skills/FileTools.cs` + `ToolHostHub.cs` |
 | 改配置项 | `src/LogAgent.Shared/Configuration/` |
 | 加桌面页面 | `src/LogAgent.Desktop/Views/` + `ViewModels/`（记得在 `App.axaml` 注册 DataTemplate） |
+| 改 Android 打包 | `tools/android/*.sh` + `src/LogAgent.Android/`（方案见 `docs/06-Android-APK方案-proroot容器.md`） |

@@ -61,7 +61,7 @@
                 <StackPanel Spacing="10">
                     <TextBlock Text="启动与自动化" Classes="section"/>
                     <CheckBox Content="{Binding AutoStartLabel}" IsChecked="{Binding AutoStart, Mode=TwoWay}"/>
-                    <CheckBox Content="启动后自动连接 Bot（OneBot 服务与官方 Bot 按各自「启用」开关连接）"
+                    <CheckBox Content="启动后自动连接频道（官方 Bot 优先，其次 OneBot / NapCat，按频道「启用」开关连接）"
                               IsChecked="{Binding AutoStartBots, Mode=TwoWay}"/>
                     <CheckBox Content="启动时最小化（开机自启场景）" IsChecked="{Binding StartMinimized, Mode=TwoWay}"/>
                 </StackPanel>
