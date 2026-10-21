@@ -3,6 +3,9 @@ Description=LogAgent QQ 日志分析助手（无头服务）
 Documentation=https://github.com/anylyralabs/LogAgent-for-QQ
 After=network-online.target
 Wants=network-online.target
+# 防止异常时无限热重启（5 分钟内最多 10 次）；正常 WS 重连由应用内部退避处理
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=simple
@@ -11,16 +14,24 @@ User=logagent
 Group=logagent
 WorkingDirectory=/opt/logagent
 Environment=HOME=/var/lib/logagent
+Environment=LOGAGENT_CONFIG_DIR=/var/lib/logagent/config
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
-# 可选：把配置/数据放到独立目录（默认 $HOME/.config/LogAgent）
-# Environment=LOGAGENT_CONFIG_DIR=/var/lib/logagent/config
-
 ExecStart=/opt/logagent/LogAgent.Headless serve
-Restart=on-failure
-RestartSec=5
+# 进程意外退出/正常退出都拉起；应用内部已有 WS 退避重连
+Restart=always
+RestartSec=10
 # systemd 停止时发 SIGTERM；应用据此切段会话后退出
 KillSignal=SIGTERM
-TimeoutStopSec=30
+TimeoutStopSec=20
+
+# 资源与日志护栏
+TasksMax=256
+LimitNOFILE=65535
+MemoryHigh=768M
+MemoryMax=1G
+OOMPolicy=restart
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
 
 # 基础加固（按需放宽）
 NoNewPrivileges=true

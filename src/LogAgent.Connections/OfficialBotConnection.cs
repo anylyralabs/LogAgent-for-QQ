@@ -40,8 +40,10 @@ public sealed class OfficialBotConnection : IBotConnection
     /// <summary>官方 Bot 单条消息的保守长度上限（超过则回退分段发送）。</summary>
     private const int MaxMergedMessageLength = 4500;
 
+    private readonly SemaphoreSlim _tokenGate = new(1, 1);
     private string? _accessToken;
     private DateTimeOffset _tokenExpiresAt;
+    private TimeSpan _tokenRefreshMargin = TimeSpan.FromMinutes(5);
     private string? _sessionId;
     private string? _selfOpenId;
     private long _lastSeq;
@@ -299,22 +301,32 @@ public sealed class OfficialBotConnection : IBotConnection
         var backoff = TimeSpan.FromSeconds(1);
         while (!ct.IsCancellationRequested)
         {
+            var cleanExit = false;
             try
             {
                 await ConnectOnceAsync(gatewayUrl, ct);
+                cleanExit = true;
                 backoff = TimeSpan.FromSeconds(1);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Log($"WS 断开：{ex.Message}，{backoff.TotalSeconds}s 后重连");
                 await Task.Delay(backoff, ct);
-                backoff = backoff.TotalSeconds < 60 ? TimeSpan.FromMilliseconds(backoff.TotalMilliseconds * 2) : TimeSpan.FromSeconds(60);
+                backoff = backoff.TotalSeconds < 60
+                    ? TimeSpan.FromMilliseconds(backoff.TotalMilliseconds * 2)
+                    : TimeSpan.FromSeconds(60);
             }
+
+            // 正常断开也稍等，避免网关连续 op9 时形成无间隔热循环。
+            if (cleanExit) await Task.Delay(TimeSpan.FromSeconds(2), ct);
         }
     }
 
     private async Task ConnectOnceAsync(string gatewayUrl, CancellationToken ct)
     {
+        // 重连时 token 可能已过期；必须先刷新，否则网关会返回 op9 Invalid Session。
+        await RefreshTokenAsync(ct);
+
         _ws?.Dispose();
         _ws = new ClientWebSocket();
         _ws.Options.SetRequestHeader("Authorization", $"QQBot {_accessToken}");
@@ -430,7 +442,9 @@ public sealed class OfficialBotConnection : IBotConnection
                 break;
             case 9: // Invalid Session
                 _sessionId = null;
+                _lastSeq = 0;
                 Log("会话无效，将重新 Identify");
+                _ws?.Abort(); // 打断接收循环，交给 RunWsAsync 退避重连
                 break;
         }
     }
@@ -576,20 +590,36 @@ public sealed class OfficialBotConnection : IBotConnection
         => _ws!.SendAsync(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload)),
             WebSocketMessageType.Text, true, ct);
 
+    private bool HasValidToken =>
+        _accessToken is not null && DateTimeOffset.UtcNow < _tokenExpiresAt - _tokenRefreshMargin;
+
     private async Task RefreshTokenAsync(CancellationToken ct)
     {
-        if (_accessToken is not null && DateTimeOffset.UtcNow < _tokenExpiresAt - TimeSpan.FromMinutes(5))
-            return;
-        using var resp = await _http.PostAsJsonAsync(TokenEndpoint,
-            new { appId = _config.AppId, clientSecret = _config.AppSecret }, ct);
-        resp.EnsureSuccessStatusCode();
-        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
-        _accessToken = doc.RootElement.GetProperty("access_token").GetString()
-            ?? throw new InvalidOperationException("获取 access_token 失败");
-        // 注意：官方 expires_in 返回的是字符串（"7200"），必须兼容读取
-        var expiresIn = ReadInt(doc.RootElement, "expires_in", 7200);
-        _tokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
-        Log($"access_token 已刷新（{expiresIn}s）");
+        if (HasValidToken) return;
+
+        // 令牌接口偶尔只返回 180s；固定“提前 5 分钟刷新”会导致每次调用都刷新，
+        // 甚至互相顶掉会话。这里按实际 TTL 动态计算提前量，并串行化刷新。
+        await _tokenGate.WaitAsync(ct);
+        try
+        {
+            if (HasValidToken) return;
+            using var resp = await _http.PostAsJsonAsync(TokenEndpoint,
+                new { appId = _config.AppId, clientSecret = _config.AppSecret }, ct);
+            resp.EnsureSuccessStatusCode();
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            _accessToken = doc.RootElement.GetProperty("access_token").GetString()
+                ?? throw new InvalidOperationException("获取 access_token 失败");
+
+            // 注意：官方 expires_in 返回的是字符串（"7200"），必须兼容读取
+            var expiresIn = Math.Max(30, ReadInt(doc.RootElement, "expires_in", 7200));
+            _tokenRefreshMargin = TimeSpan.FromSeconds(Math.Clamp(expiresIn / 3, 15, 300));
+            _tokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
+            Log($"access_token 已刷新（{expiresIn}s，提前 {_tokenRefreshMargin.TotalSeconds:F0}s 刷新）");
+        }
+        finally
+        {
+            _tokenGate.Release();
+        }
     }
 
     /// <summary>兼容字符串/数字的 JSON 整数字段读取（官方 API 混用两种类型）。</summary>
