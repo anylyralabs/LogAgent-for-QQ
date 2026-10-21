@@ -526,20 +526,33 @@ public sealed class OfficialBotConnection : IBotConnection
         if (!d.TryGetProperty("msg_elements", out var elements) || elements.ValueKind != JsonValueKind.Array)
             return null;
 
-        var text = "";
+        var texts = new List<string>();
         var sender = "";
         var attachments = new List<MessageAttachment>();
         var images = new List<string>();
-        foreach (var el in elements.EnumerateArray())
+
+        void Collect(JsonElement el, int depth)
         {
-            if (el.ValueKind != JsonValueKind.Object) continue;
-            if (text.Length == 0) text = ElementText(el);
+            if (depth > 3 || el.ValueKind != JsonValueKind.Object) return;
+            var text = ElementText(el, depth);
+            if (text.Length > 0 && !texts.Contains(text)) texts.Add(text);
             if (sender.Length == 0) sender = ElementSender(el);
             var (files, pics) = ParseAttachmentBundle(el);
             attachments.AddRange(files);
             images.AddRange(pics);
+
+            // MsgElement 支持嵌套，引用里再引用时把内层正文/附件也带上。
+            if (el.TryGetProperty("msg_elements", out var nested) && nested.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var child in nested.EnumerateArray())
+                    Collect(child, depth + 1);
+            }
         }
 
+        foreach (var el in elements.EnumerateArray())
+            Collect(el, 0);
+
+        var text = string.Join("\n", texts);
         return text.Length > 0 || attachments.Count > 0 || images.Count > 0
             ? new QuoteInfo(text, sender, attachments, images)
             : null;
