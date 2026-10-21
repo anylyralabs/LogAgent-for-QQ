@@ -424,6 +424,81 @@ public class OfficialBotAttachmentTests
         using var doc = System.Text.Json.JsonDocument.Parse("""{"content":"hi"}""");
         Assert.Empty(LogAgent.Connections.OfficialBotConnection.ParseAttachments(doc.RootElement));
     }
+
+    [Fact]
+    public async Task ParseEvent_Quote_IncludesQuotedTextFileAndImages()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse("""
+            {
+              "t": "GROUP_AT_MESSAGE_CREATE",
+              "d": {
+                "id": "m-quote",
+                "content": "这个怎么修",
+                "group_openid": "g1",
+                "message_type": 103,
+                "author": { "member_openid": "u1", "username": "小明" },
+                "attachments": [
+                  { "content_type": "image/png", "url": "https://example.com/current.png", "size": 100 }
+                ],
+                "msg_elements": [
+                  {
+                    "msg_idx": "REF",
+                    "message_type": 0,
+                    "content": "游戏启动就崩了",
+                    "author": { "member_openid": "u2", "username": "小红" },
+                    "attachments": [
+                      { "content_type": "file", "filename": "crash.log", "url": "https://example.com/crash.log", "size": 123 },
+                      { "content_type": "image/jpeg", "url": "https://example.com/quoted.jpg", "size": 456 }
+                    ]
+                  }
+                ],
+                "message_scene": { "ext": ["ref_msg_idx=REF"] }
+              }
+            }
+            """);
+        await using var conn = new LogAgent.Connections.OfficialBotConnection(
+            new LogAgent.Shared.Configuration.OfficialBotConfig { AppId = "a", AppSecret = "b" });
+
+        var msg = conn.ParseEvent(doc.RootElement, isGroup: true);
+
+        Assert.NotNull(msg);
+        Assert.Contains("[引用消息] 小红：游戏启动就崩了", msg!.Text);
+        Assert.Contains("[当前消息] 这个怎么修", msg.Text);
+        var file = Assert.Single(msg.Attachments!);
+        Assert.Equal("crash.log", file.Name);
+        Assert.Equal("https://example.com/crash.log", file.Url);
+        Assert.Equal(2, msg.ImageUrls!.Count);
+        Assert.Contains("https://example.com/current.png", msg.ImageUrls);
+        Assert.Contains("https://example.com/quoted.jpg", msg.ImageUrls);
+    }
+
+    [Fact]
+    public async Task ParseEvent_QuoteOnly_IsNotDropped()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse("""
+            {
+              "t": "GROUP_AT_MESSAGE_CREATE",
+              "d": {
+                "id": "m-quote-only",
+                "group_openid": "g2",
+                "message_type": 103,
+                "author": { "member_openid": "u1", "username": "小明" },
+                "msg_elements": [
+                  { "content": "只有被引用的内容", "author": { "username": "小红" } }
+                ]
+              }
+            }
+            """);
+        await using var conn = new LogAgent.Connections.OfficialBotConnection(
+            new LogAgent.Shared.Configuration.OfficialBotConfig { AppId = "a", AppSecret = "b" });
+
+        var msg = conn.ParseEvent(doc.RootElement, isGroup: true);
+
+        Assert.NotNull(msg);
+        Assert.Equal("[引用消息] 小红：只有被引用的内容", msg!.Text);
+        Assert.Null(msg.Attachments);
+        Assert.Null(msg.ImageUrls);
+    }
 }
 
 // ─────────────────────────── 运行时：链接富化进入管线 ───────────────────────────

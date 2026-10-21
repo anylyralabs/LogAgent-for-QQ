@@ -121,6 +121,7 @@ public class PromptFormatTests
         Assert.Contains("表格", prompt);
         Assert.Contains("3 列", prompt);
         Assert.Contains("压缩包", prompt);
+        Assert.Contains("引用消息", prompt);
         Assert.DoesNotContain("QQ 不渲染 Markdown", prompt);
         Assert.DoesNotContain("【结论】", prompt);
 

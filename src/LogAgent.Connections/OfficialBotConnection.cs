@@ -454,10 +454,22 @@ public sealed class OfficialBotConnection : IBotConnection
     {
         var d = payload.GetProperty("d");
         var content = d.TryGetProperty("content", out var c) ? c.GetString()?.Trim() : null;
-        var attachments = ParseAttachments(d);
-        if (string.IsNullOrEmpty(content) && attachments.Count == 0) return null;
+        var (attachments, images) = ParseAttachmentBundle(d);
+        var quote = ParseQuote(d);
+
+        // 引用消息的正文在 msg_elements 里；即使当前消息只有引用/附件，也不能丢事件。
+        var text = ComposeText(content, quote);
+        if (string.IsNullOrEmpty(text) && attachments.Count == 0 && images.Count == 0) return null;
+
+        // 引用里的文件同样交给富化环节下载；图片走多模态，不当作二进制附件。
+        if (quote is not null)
+        {
+            attachments.AddRange(quote.Attachments);
+            images.AddRange(quote.Images);
+        }
 
         // 群全量模式下平台可能只发 GROUP_MESSAGE_CREATE；判断正文里的 <@...> 是否是机器人。
+        // 注意只检查当前消息正文，避免引用里提到机器人就误触发。
         if (isGroup && !mentionedMe && MentionsSelf(d, content, _selfOpenId))
             mentionedMe = true;
 
@@ -489,12 +501,111 @@ public sealed class OfficialBotConnection : IBotConnection
                        author?.TryGetProperty("user_openid", out var uo) == true ? uo.GetString() ?? "" :
                        author?.TryGetProperty("id", out var uid) == true ? uid.GetString() ?? "" : "",
             SenderName = senderName,
-            Text = content ?? "",
+            Text = text,
             MentionedMe = mentionedMe, // GROUP_AT_MESSAGE_CREATE 天然是 @ 机器人；全量群消息为 false
             Timestamp = timestamp,
             RawJson = payload.GetRawText(),
             Attachments = attachments.Count > 0 ? attachments : null,
+            ImageUrls = images.Count > 0 ? images.Distinct(StringComparer.OrdinalIgnoreCase).ToList() : null,
         };
+    }
+
+    /// <summary>官方 Bot 引用消息的解析结果：引用正文 + 引用者昵称 + 被引附件/图片。</summary>
+    private sealed record QuoteInfo(
+        string Text,
+        string Sender,
+        List<MessageAttachment> Attachments,
+        List<string> Images);
+
+    /// <summary>
+    /// 解析 message_type=103 的引用消息。被引用内容在 d.msg_elements[] 中（content/attachments，
+    /// 可能还有嵌套 msg_elements）；message_scene.ext 里的 ref_msg_idx 只是索引，不需要再调接口。
+    /// </summary>
+    private static QuoteInfo? ParseQuote(JsonElement d)
+    {
+        if (!d.TryGetProperty("msg_elements", out var elements) || elements.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var text = "";
+        var sender = "";
+        var attachments = new List<MessageAttachment>();
+        var images = new List<string>();
+        foreach (var el in elements.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object) continue;
+            if (text.Length == 0) text = ElementText(el);
+            if (sender.Length == 0) sender = ElementSender(el);
+            var (files, pics) = ParseAttachmentBundle(el);
+            attachments.AddRange(files);
+            images.AddRange(pics);
+        }
+
+        return text.Length > 0 || attachments.Count > 0 || images.Count > 0
+            ? new QuoteInfo(text, sender, attachments, images)
+            : null;
+    }
+
+    /// <summary>引用元素正文；content 为空时递归找嵌套引用，卡片则退化为可读标题。</summary>
+    private static string ElementText(JsonElement el, int depth = 0)
+    {
+        if (depth > 3) return "";
+        if (el.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
+        {
+            var text = content.GetString()?.Trim();
+            if (!string.IsNullOrEmpty(text)) return text;
+        }
+
+        if (el.TryGetProperty("ark_data", out var ark) && ark.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var key in new[] { "prompt", "title" })
+            {
+                if (ark.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(v.GetString()))
+                    return v.GetString()!.Trim();
+            }
+        }
+
+        if (el.TryGetProperty("msg_elements", out var nested) && nested.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var child in nested.EnumerateArray())
+            {
+                var text = ElementText(child, depth + 1);
+                if (text.Length > 0) return text;
+            }
+        }
+        return "";
+    }
+
+    /// <summary>引用元素作者昵称；没有昵称时退化为 openid，至少让模型知道是谁说的。</summary>
+    private static string ElementSender(JsonElement el)
+    {
+        if (!el.TryGetProperty("author", out var author) || author.ValueKind != JsonValueKind.Object)
+            return "";
+        foreach (var name in new[] { "username", "member_openid", "user_openid", "id" })
+        {
+            if (author.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(v.GetString()))
+                return v.GetString()!.Trim();
+        }
+        return "";
+    }
+
+    /// <summary>把引用正文与当前消息拼成模型可读的上下文，避免把引用内容误当成用户本次指令。</summary>
+    private static string ComposeText(string? current, QuoteInfo? quote)
+    {
+        if (quote is null) return current ?? "";
+
+        var quoteText = quote.Text.Trim();
+        if (quoteText.Length > 500) quoteText = quoteText[..500] + "…";
+        if (quoteText.Length == 0)
+            quoteText = quote.Images.Count > 0 && quote.Attachments.Count > 0 ? "（含图片和文件）"
+                : quote.Images.Count > 0 ? "（含图片）"
+                : quote.Attachments.Count > 0 ? "（含文件）"
+                : "（内容为空）";
+
+        var sender = string.IsNullOrWhiteSpace(quote.Sender) ? "" : quote.Sender + "：";
+        var quoted = $"[引用消息] {sender}{quoteText}";
+        return string.IsNullOrWhiteSpace(current) ? quoted : $"{quoted}\n[当前消息] {current.Trim()}";
     }
 
     private static readonly Regex MentionPattern = new(
@@ -546,9 +657,13 @@ public sealed class OfficialBotConnection : IBotConnection
     }
 
     /// <summary>解析官方 Bot 消息附件（attachments[]：filename/url/size/content_type；url 有效期约 10 分钟需尽快下载）。</summary>
-    public static List<MessageAttachment> ParseAttachments(JsonElement d)
+    public static List<MessageAttachment> ParseAttachments(JsonElement d) =>
+        ParseAttachmentItems(d).Select(i => i.Attachment).ToList();
+
+    /// <summary>附件原始信息（含 content_type，用于区分图片与文件）。</summary>
+    private static List<(MessageAttachment Attachment, string? ContentType)> ParseAttachmentItems(JsonElement d)
     {
-        var result = new List<MessageAttachment>();
+        var result = new List<(MessageAttachment, string?)>();
         if (!d.TryGetProperty("attachments", out var attachments) || attachments.ValueKind != JsonValueKind.Array)
             return result;
         foreach (var att in attachments.EnumerateArray())
@@ -556,20 +671,38 @@ public sealed class OfficialBotConnection : IBotConnection
             if (!att.TryGetProperty("url", out var urlEl) || urlEl.ValueKind != JsonValueKind.String) continue;
             var url = urlEl.GetString();
             if (string.IsNullOrEmpty(url)) continue;
+            var contentType = att.TryGetProperty("content_type", out var ctv) && ctv.ValueKind == JsonValueKind.String
+                ? ctv.GetString()
+                : null;
             var name = att.TryGetProperty("filename", out var fn) && fn.ValueKind == JsonValueKind.String
                 ? fn.GetString()
                 : null;
             if (string.IsNullOrEmpty(name))
-            {
-                var contentType = att.TryGetProperty("content_type", out var ctv) && ctv.ValueKind == JsonValueKind.String
-                    ? ctv.GetString()
-                    : null;
                 name = $"附件-{contentType ?? "unknown"}";
-            }
             var size = att.TryGetProperty("size", out var sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt64() : 0;
-            result.Add(new MessageAttachment(name!, url!, size));
+            result.Add((new MessageAttachment(name!, url!, size), contentType));
         }
         return result;
+    }
+
+    /// <summary>
+    /// 把附件拆成「文件」与「图片 URL」：图片交给多模态读图，
+    /// 文件交给消息富化下载/读取，避免图片被当成二进制附件后直接报“不是可读文本”。
+    /// </summary>
+    private static (List<MessageAttachment> Files, List<string> Images) ParseAttachmentBundle(JsonElement d)
+    {
+        var files = new List<MessageAttachment>();
+        var images = new List<string>();
+        foreach (var (attachment, contentType) in ParseAttachmentItems(d))
+        {
+            if (contentType is not null &&
+                (contentType.Equals("image", StringComparison.OrdinalIgnoreCase) ||
+                 contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
+                images.Add(attachment.Url);
+            else
+                files.Add(attachment);
+        }
+        return (files, images);
     }
 
     private async Task<JsonElement?> ReceiveJsonAsync(CancellationToken ct)
